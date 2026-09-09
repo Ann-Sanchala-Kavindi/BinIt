@@ -1,0 +1,63 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: smartwaste_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ConnectionStrings__DefaultConnection: "Host=localhost;Port=5432;Database=smartwaste_test;Username=postgres;Password=postgres"
+      Jwt__Key: "CiSecretKeyForSmartWasteBackendTestingOnly123456!"
+      Jwt__Issuer: "SmartWaste.Api"
+      Jwt__Audience: "SmartWaste.Clients"
+      Jwt__ExpiryMinutes: "60"
+      AiService__BaseUrl: "http://127.0.0.1:8000"
+      AiService__TimeoutSeconds: "5"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore backend/SmartWaste.sln
+
+      - name: Build solution
+        run: dotnet build backend/SmartWaste.sln --configuration Release --no-restore
+
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 8.0.8
+
+      - name: Apply database migrations
+        run: dotnet ef database update --project backend/src/SmartWaste.Infrastructure --startup-project backend/src/SmartWaste.Api --configuration Release --no-build
+
+      - name: Run tests
+        run: dotnet test backend/SmartWaste.sln --configuration Release --no-build
