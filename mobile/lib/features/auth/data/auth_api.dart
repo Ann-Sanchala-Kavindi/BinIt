@@ -45,9 +45,28 @@ class AuthApi {
         data: {
           'email': email,
           'password': password,
+          'clientType': 'mobile',
         },
       );
       return AuthResponse.fromJson(response.data as Map<String, dynamic>);
+    } on DioException catch (e) {
+      throw ApiException.fromDioError(e);
+    }
+  }
+
+  /// Changes password for currently authenticated user.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    try {
+      await _client.dio.post(
+        ApiConstants.changePassword,
+        data: {
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+        },
+      );
     } on DioException catch (e) {
       throw ApiException.fromDioError(e);
     }

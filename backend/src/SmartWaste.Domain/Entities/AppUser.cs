@@ -10,6 +10,7 @@ public class AppUser : IdentityUser<Guid>
 {
     public string FullName { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
+    public bool MustChangePassword { get; set; } = false;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 }

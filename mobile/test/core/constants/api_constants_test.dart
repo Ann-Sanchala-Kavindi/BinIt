@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/constants/api_constants.dart';
 
@@ -17,6 +17,7 @@ void main() {
       expect(ApiConstants.register, '/auth/register');
       expect(ApiConstants.login, '/auth/login');
       expect(ApiConstants.me, '/auth/me');
+      expect(ApiConstants.changePassword, '/auth/change-password');
     });
 
     test('network timeouts are set to 15 seconds', () {

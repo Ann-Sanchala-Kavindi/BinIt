@@ -77,4 +77,33 @@ public class AuthController : ControllerBase
         var profile = await _authService.GetCurrentUserAsync(userId);
         return Ok(profile);
     }
+
+    /// <summary>
+    /// Changes password for the currently authenticated user.
+    /// </summary>
+    /// <param name="request">Current and new password payload</param>
+    /// <returns>No content on success</returns>
+    [HttpPost("change-password")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier)
+                          ?? User.FindFirstValue("sub");
+
+        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized",
+                Detail = "User identity claim could not be determined."
+            });
+        }
+
+        await _authService.ChangePasswordAsync(userId, request);
+        return NoContent();
+    }
 }

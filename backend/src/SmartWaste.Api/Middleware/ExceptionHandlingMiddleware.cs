@@ -81,6 +81,35 @@ public class ExceptionHandlingMiddleware
                 Detail = aiEx.Message,
                 Instance = context.Request.Path
             },
+            UnsupportedClientRoleException unsupEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.Forbidden,
+                Title = "Unsupported Client Role",
+                Detail = unsupEx.Message,
+                Instance = context.Request.Path,
+                Extensions = { ["errorCode"] = unsupEx.ErrorCode }
+            },
+            PasswordChangeRequiredException pwdReqEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.Forbidden,
+                Title = "Password Change Required",
+                Detail = pwdReqEx.Message,
+                Instance = context.Request.Path
+            },
+            InvalidRoleException invRoleEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.BadRequest,
+                Title = "Invalid Role",
+                Detail = invRoleEx.Message,
+                Instance = context.Request.Path
+            },
+            UserManagementException userMgmtEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.BadRequest,
+                Title = "User Management Error",
+                Detail = userMgmtEx.Message,
+                Instance = context.Request.Path
+            },
             _ => new ProblemDetails
             {
                 Status = (int)HttpStatusCode.InternalServerError,

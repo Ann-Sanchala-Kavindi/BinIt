@@ -51,6 +51,7 @@ class AuthState {
   bool get isAuthenticated => status == AuthStatus.authenticated && user != null;
   bool get isLoading => status == AuthStatus.loading;
   bool get isInitial => status == AuthStatus.initial;
+  bool get mustChangePassword => user?.mustChangePassword ?? false;
 }
 
 /// Provider for the singleton AuthRepository.
@@ -127,6 +128,28 @@ class AuthNotifier extends Notifier<AuthState> {
       return false;
     } catch (e) {
       state = const AuthState.error('An unexpected error occurred during registration.');
+      return false;
+    }
+  }
+
+  /// Changes user password, wipes token, and transitions state to unauthenticated.
+  Future<bool> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    state = const AuthState.loading();
+    try {
+      await _repository.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+      state = const AuthState.unauthenticated();
+      return true;
+    } on ApiException catch (e) {
+      state = AuthState.error(e.message);
+      return false;
+    } catch (_) {
+      state = const AuthState.error('Failed to change password. Please try again.');
       return false;
     }
   }

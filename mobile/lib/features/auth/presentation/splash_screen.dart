@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../shared/widgets/app_loading_indicator.dart';
 import '../providers/auth_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -26,16 +29,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             Icon(
               Icons.recycling_rounded,
               size: 72,
-              color: Color(0xFF16A34A),
+              color: AppColors.primary,
             ),
-            SizedBox(height: 20),
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF16A34A)),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Verifying session...',
-              style: TextStyle(color: Colors.black54, fontSize: 14),
+            SizedBox(height: AppSpacing.lg),
+            AppLoadingIndicator(
+              message: 'Verifying session...',
             ),
           ],
         ),

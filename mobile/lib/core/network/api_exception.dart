@@ -4,11 +4,13 @@ import 'package:dio/dio.dart';
 class ApiException implements Exception {
   final String message;
   final int? statusCode;
+  final String? errorCode;
   final dynamic details;
 
   const ApiException({
     required this.message,
     this.statusCode,
+    this.errorCode,
     this.details,
   });
 
@@ -32,8 +34,16 @@ class ApiException implements Exception {
         final responseData = error.response?.data;
 
         String extractedMessage = 'An unexpected server error occurred.';
+        String? errorCode;
 
         if (responseData is Map<String, dynamic>) {
+          if (responseData['errorCode'] != null) {
+            errorCode = responseData['errorCode'].toString();
+          } else if (responseData['extensions'] is Map<String, dynamic> &&
+              responseData['extensions']['errorCode'] != null) {
+            errorCode = responseData['extensions']['errorCode'].toString();
+          }
+
           if (responseData['detail'] != null) {
             extractedMessage = responseData['detail'].toString();
           } else if (responseData['title'] != null) {
@@ -50,6 +60,7 @@ class ApiException implements Exception {
                   ? extractedMessage
                   : 'Invalid request data. Please check your input.',
               statusCode: 400,
+              errorCode: errorCode,
               details: responseData,
             );
           case 401:
@@ -58,11 +69,23 @@ class ApiException implements Exception {
                   ? extractedMessage
                   : 'Invalid email or password.',
               statusCode: 401,
+              errorCode: errorCode,
             );
           case 403:
-            return const ApiException(
+            if (errorCode == 'unsupported_client_role' ||
+                extractedMessage == 'This account is for the SmartWaste web application.') {
+              return ApiException(
+                message: 'This account is for the SmartWaste web application.',
+                statusCode: 403,
+                errorCode: errorCode ?? 'unsupported_client_role',
+                details: responseData,
+              );
+            }
+            return ApiException(
               message: 'Access denied. Your account lacks required permissions.',
               statusCode: 403,
+              errorCode: errorCode,
+              details: responseData,
             );
           case 404:
             return const ApiException(

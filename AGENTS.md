@@ -68,9 +68,14 @@ Unless explicitly instructed otherwise:
 - **API Standards**:
   - Prefix: Always preserve `/api/v1`.
   - JSON Casing: Always use `camelCase`.
-  - Error Handling: Always return standard RFC 7807 `ProblemDetails`.
 - **Validation**: Business rules and data validation must reside in application services or FluentValidation validators, **never** solely in controller action methods.
 - **Dependency Injection**: Use typed clients (`AddHttpClient<TInterface, TImpl>()`) and strongly typed options (`IOptions<TOptions>`).
+- **Platform Role Invariants**:
+  - React Web connects users with roles `WasteOfficer` and `MunicipalManager`.
+  - Flutter Mobile connects users with roles `Citizen` and `Driver`.
+  - Incompatible platform login attempts are authoritatively rejected by ASP.NET Core with `403 Forbidden` (`ProblemDetails`) and issue no JWT.
+  - Internal accounts (`Driver`, `WasteOfficer`, `MunicipalManager`) are provisioned exclusively by `MunicipalManager` with secure temporary passwords and mandatory first-login password change (`MustChangePassword = true`). Tokens with `must_change_password=True` are restricted from accessing operational business endpoints.
+  - Citizen accounts can only be created via public registration (`POST /api/v1/auth/register`).
 
 ---
 
@@ -90,6 +95,28 @@ Unless explicitly instructed otherwise:
 - **Client Discipline**: Do not duplicate authoritative server-side business rules on the client. UI checks are for UX only; backend validates authoritatively.
 - **Centralized API Client**: Use the established `axiosClient` with Bearer token interceptor and standard token storage.
 
+### React Web UI & Styling
+- **Authoritative Framework**: Tailwind CSS v4 is the primary styling approach for the React web application via the official Vite plugin (`@tailwindcss/vite`).
+- **Visual Foundation**: The established SmartWaste visual language features:
+  - Deep forest/emerald sidebar and navigation (`#064e3b` / dark emerald with bright emerald active indicators)
+  - White content surfaces on a light cool-gray page background (`#f8fafc`)
+  - Dark navy/slate primary text (`#0f172a`) and muted blue-gray secondary text (`#64748b`)
+  - Restrained SmartWaste green accents (pale green circular icon containers, emerald primary actions)
+  - Subtle borders and soft shadows
+  - Compact operational dashboard density with clear section hierarchy
+  - Reusable UI/layout components (`Button`, `Input`, `Card`, `Alert`, `LoadingSpinner`, `DashboardLayout`)
+  - Responsive and accessible design across mobile, tablet, and desktop viewports
+  - No unrelated UI frameworks and no random per-page themes
+  - No excessive gradients, glassmorphism, or neon styling
+  - Future React pages must visually align with the established dashboard theme.
+- **Reference Consistency**: Reference-style consistency should be achieved through shared theme tokens and reusable components rather than copying large Tailwind class strings independently across pages.
+- **No Competing Frameworks**: Do not introduce a second CSS/UI framework (Bootstrap, Material UI, Chakra, Radix, etc.) without explicit approval.
+- **No Static Inline Styles**: Avoid static inline `style={{ ... }}` objects for normal UI styling; use Tailwind utility classes.
+- **Reusable Primitives**: Prefer reusable components from `web/src/components/ui` (`Button`, `Input`, `Card`, `Alert`, `LoadingSpinner`) and established layouts (`web/src/layouts`).
+- **Accessibility & Responsiveness**: Maintain semantic HTML, accessible form labels, keyboard navigation, and visible focus rings.
+- **Header Account Menu**: Authenticated dashboard layouts should expose account/session actions through the shared header account menu rather than requiring users to scroll the sidebar for Logout.
+- **Role Dashboard Shell Reuse**: WasteOfficer and MunicipalManager dashboards must reuse the shared SmartWaste dashboard shell and visual theme; role-specific content and navigation should be supplied through reusable configuration and components rather than duplicated layouts.
+
 ---
 
 ## 8. Mobile Application Rules (`/mobile`)
@@ -98,6 +125,15 @@ Unless explicitly instructed otherwise:
 - **Never Call FastAPI**: Flutter must **NEVER** call the Python AI service directly.
 - **Secure Storage**: JWT access tokens must be stored strictly in hardware-backed `FlutterSecureStorage`.
 - **Configurable Networking**: Preserve configurable base URLs via `ApiConstants` (`10.0.2.2:5276` for Android Emulator, `--dart-define=API_BASE_URL=...` for physical devices). Never hardcode personal LAN IP addresses into committed files.
+
+### Flutter Mobile UI & Styling
+- **Centralized Design System**: Flutter uses centralized Material 3 `ThemeData` (`mobile/lib/core/theme/`) and shared SmartWaste UI widgets (`mobile/lib/shared/widgets/`).
+- **Reuse Foundation**: New screens must reuse established colors (`AppColors`), typography (`AppTypography`), spacing (`AppSpacing`), and reusable components (`AppButton`, `AppTextField`, `AppCard`, `AppAlert`, `AppLoadingIndicator`).
+- **No Hard-Coded Styling**: Avoid repeated hard-coded colors, padding, and corner radius across screens.
+- **No Competing Frameworks**: Do not introduce a second styling or UI framework without explicit project approval.
+- **Product Identity**: Flutter mobile UI should reflect the SmartWaste product identity (forest/emerald greens, slate text, light cool-gray background `#F8FAFC`, white surfaces, restrained accents) while remaining mobile-native.
+- **Responsiveness & Accessibility**: Screens must be responsive across phone form factors (`SafeArea`, `SingleChildScrollView`, keyboard avoidance) and accessible (semantic widgets, clear contrast, 48dp min tap targets, clear text error indicators).
+- **Shell & Theme Reuse**: Citizen and Driver dashboards reuse the shared authenticated SmartWaste mobile shell and theme, while role-specific navigation and content remain strictly separate.
 
 ---
 

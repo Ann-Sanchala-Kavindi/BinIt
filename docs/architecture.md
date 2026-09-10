@@ -338,6 +338,16 @@ Future development phases will incorporate external services under strict encaps
 ## 11. Security & Compliance Architecture
 
 - **Authentication**: Stateless HMAC-SHA256 JWT access tokens issued by ASP.NET Core with strict expiration and cryptographic validation.
+- **Client Platform Role Policy**:
+  - **React Web Application**: Strictly restricted to municipal staff (`WasteOfficer` and `MunicipalManager`).
+  - **Flutter Mobile Application**: Strictly restricted to public citizens and field collectors (`Citizen` and `Driver`).
+  - **Platform Enforcement**: Validated on `POST /api/v1/auth/login` via `clientType`. Incompatible role attempts return `403 Forbidden` (`ProblemDetails`) without issuing a JWT. Both web and mobile frontends also perform defense-in-depth role checks.
+- **Internal User Provisioning & Password Lifecycle**:
+  - **Citizen Registration**: Only `Citizen` accounts can be created via public registration (`POST /api/v1/auth/register`).
+  - **Staff User Provisioning**: Internal accounts (`Driver`, `WasteOfficer`, `MunicipalManager`) are created exclusively by authorized `MunicipalManager` users (`POST /api/v1/users`).
+  - **One-Time Temporary Passwords**: Provisioned users receive a cryptographically secure 16-character temporary password returned strictly once upon creation (never stored in plaintext, never logged, never returned in list/detail queries).
+  - **Mandatory First-Login Password Change**: Accounts created with temporary passwords have `MustChangePassword = true`. The issued JWT includes `must_change_password = "True"`. Backend middleware strictly restricts access to `POST /api/v1/auth/change-password` and `GET /api/v1/auth/me`; attempts to access business endpoints return `403 Forbidden` (`ProblemDetails`). Both client applications immediately force navigation to a dedicated Change Password screen.
+  - **Account Deactivation Guard**: Municipal Managers can toggle staff active status (`isActive`), but cannot deactivate their own active account.
 - **Authorization**: Role-based access control (`Citizen`, `WasteOfficer`, `Driver`, `MunicipalManager`) enforced on every endpoint.
 - **Secrets Management**: Configuration via ASP.NET Core User Secrets (Development) and Environment Variables (Production). No plain-text credentials, database passwords, or JWT signing keys are committed to Git.
 - **Cross-Origin Resource Sharing (CORS)**: Controlled strictly by ASP.NET Core in `Program.cs`, permitting only authorized client origins.

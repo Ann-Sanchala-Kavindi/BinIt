@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 
 interface RoleRouteProps {
   allowedRoles: string[];
@@ -12,8 +13,13 @@ export const RoleRoute: React.FC<RoleRouteProps> = ({ allowedRoles, children }) 
 
   if (isLoading) {
     return (
-      <div style={roleLoadingStyles.container} role="status">
-        <p style={roleLoadingStyles.text}>Checking permissions...</p>
+      <div
+        className="py-12 flex flex-col items-center justify-center text-slate-500 gap-3"
+        role="status"
+        aria-label="Checking permissions"
+      >
+        <LoadingSpinner size="md" label="Checking permissions" />
+        <p className="text-sm text-slate-500">Checking permissions...</p>
       </div>
     );
   }
@@ -29,15 +35,4 @@ export const RoleRoute: React.FC<RoleRouteProps> = ({ allowedRoles, children }) 
   }
 
   return children ? <>{children}</> : <Outlet />;
-};
-
-const roleLoadingStyles: Record<string, React.CSSProperties> = {
-  container: {
-    padding: '2rem',
-    textAlign: 'center',
-    color: '#64748b',
-  },
-  text: {
-    fontSize: '0.95rem',
-  },
 };
