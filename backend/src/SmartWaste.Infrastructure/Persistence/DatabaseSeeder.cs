@@ -24,19 +24,26 @@ public static class DatabaseSeeder
         // 1. Seed Roles idempotently
         foreach (var roleName in AppRoles.All)
         {
-            if (!await roleManager.RoleExistsAsync(roleName))
+            try
             {
-                var roleResult = await roleManager.CreateAsync(new IdentityRole<Guid>(roleName));
-                if (roleResult.Succeeded)
+                if (!await roleManager.RoleExistsAsync(roleName))
                 {
-                    logger.LogInformation("Seeded Identity role: {Role}", roleName);
+                    var roleResult = await roleManager.CreateAsync(new IdentityRole<Guid>(roleName));
+                    if (roleResult.Succeeded)
+                    {
+                        logger.LogInformation("Seeded Identity role: {Role}", roleName);
+                    }
+                    else
+                    {
+                        logger.LogWarning("Failed to seed role {Role}: {Errors}",
+                            roleName,
+                            string.Join(", ", roleResult.Errors.Select(e => e.Description)));
+                    }
                 }
-                else
-                {
-                    logger.LogWarning("Failed to seed role {Role}: {Errors}",
-                        roleName,
-                        string.Join(", ", roleResult.Errors.Select(e => e.Description)));
-                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Exception while seeding role {Role}", roleName);
             }
         }
 
@@ -65,33 +72,48 @@ public static class DatabaseSeeder
 
         foreach (var devUser in devUsers)
         {
-            var existingUser = await userManager.FindByEmailAsync(devUser.Email);
-            if (existingUser == null)
+            try
             {
-                var user = new AppUser
+                var existingUser = await userManager.FindByEmailAsync(devUser.Email);
+                if (existingUser == null)
                 {
-                    Id = Guid.NewGuid(),
-                    UserName = devUser.Email,
-                    Email = devUser.Email,
-                    FullName = devUser.FullName,
-                    PhoneNumber = devUser.Phone,
-                    IsActive = true,
-                    EmailConfirmed = true,
-                    CreatedAt = DateTime.UtcNow
-                };
+                    var user = new AppUser
+                    {
+                        Id = Guid.NewGuid(),
+                        UserName = devUser.Email,
+                        Email = devUser.Email,
+                        FullName = devUser.FullName,
+                        PhoneNumber = devUser.Phone,
+                        IsActive = true,
+                        EmailConfirmed = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
 
-                var createResult = await userManager.CreateAsync(user, devPassword);
-                if (createResult.Succeeded)
-                {
-                    await userManager.AddToRoleAsync(user, devUser.Role);
-                    logger.LogInformation("Seeded development account: {Email} ({Role})", devUser.Email, devUser.Role);
+                    var createResult = await userManager.CreateAsync(user, devPassword);
+                    if (createResult.Succeeded)
+                    {
+                        await userManager.AddToRoleAsync(user, devUser.Role);
+                        logger.LogInformation("Seeded development account: {Email} ({Role})", devUser.Email, devUser.Role);
+                    }
+                    else
+                    {
+                        logger.LogWarning("Failed to create development user {Email}: {Errors}",
+                            devUser.Email,
+                            string.Join(", ", createResult.Errors.Select(e => e.Description)));
+                    }
                 }
                 else
                 {
-                    logger.LogWarning("Failed to create development user {Email}: {Errors}",
-                        devUser.Email,
-                        string.Join(", ", createResult.Errors.Select(e => e.Description)));
+                    if (!await userManager.IsInRoleAsync(existingUser, devUser.Role))
+                    {
+                        await userManager.AddToRoleAsync(existingUser, devUser.Role);
+                        logger.LogInformation("Assigned missing role {Role} to existing development account: {Email}", devUser.Role, devUser.Email);
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Exception while seeding development user {Email}", devUser.Email);
             }
         }
     }

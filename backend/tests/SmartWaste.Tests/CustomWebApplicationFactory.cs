@@ -1,8 +1,17 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Xunit;
+
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace SmartWaste.Tests;
+
+[CollectionDefinition(Name)]
+public class IntegrationTestCollection : ICollectionFixture<CustomWebApplicationFactory>
+{
+    public const string Name = "IntegrationTests";
+}
 
 public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {

@@ -9,8 +9,10 @@ using SmartWaste.Application.DTOs.Users;
 using SmartWaste.Domain.Common;
 
 namespace SmartWaste.Tests;
+using Xunit;
 
-public class UserManagementIntegrationTests : IClassFixture<CustomWebApplicationFactory>
+[Collection(IntegrationTestCollection.Name)]
+public class UserManagementIntegrationTests
 {
     private readonly HttpClient _client;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };

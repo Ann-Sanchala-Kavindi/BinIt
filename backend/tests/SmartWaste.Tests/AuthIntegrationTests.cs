@@ -7,8 +7,10 @@ using SmartWaste.Application.DTOs.Auth;
 using SmartWaste.Domain.Common;
 
 namespace SmartWaste.Tests;
+using Xunit;
 
-public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
+[Collection(IntegrationTestCollection.Name)]
+public class AuthIntegrationTests
 {
     private readonly HttpClient _client;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };

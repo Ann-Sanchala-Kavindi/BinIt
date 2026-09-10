@@ -9,8 +9,10 @@ using SmartWaste.Application.DTOs.Users;
 using SmartWaste.Domain.Common;
 
 namespace SmartWaste.Tests;
+using Xunit;
 
-public class PlatformLoginAndChangePasswordTests : IClassFixture<CustomWebApplicationFactory>
+[Collection(IntegrationTestCollection.Name)]
+public class PlatformLoginAndChangePasswordTests
 {
     private readonly HttpClient _client;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
