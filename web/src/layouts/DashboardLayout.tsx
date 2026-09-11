@@ -15,9 +15,9 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <div className="min-h-screen flex bg-slate-50 text-slate-900">
+    <div className="min-h-screen flex bg-[#F0F6F9] text-slate-900">
       {/* Desktop Fixed Sidebar */}
-      <div className="hidden md:flex md:shrink-0">
+      <div className="hidden md:flex md:shrink-0 sticky top-0 h-screen">
         <DashboardSidebar items={navItems} />
       </div>
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
-import { MenuIcon, BellIcon, ChevronDownIcon, LogoutIcon } from '../ui/Icons';
+import { MenuIcon, BellIcon, ChevronDownIcon, LogoutIcon, SearchIcon } from '../ui/Icons';
 
 interface DashboardHeaderProps {
   onOpenMobile?: () => void;
@@ -10,7 +10,6 @@ interface DashboardHeaderProps {
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   onOpenMobile,
-  title,
 }) => {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
@@ -24,11 +23,6 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   };
 
   const defaultDisplayName = formatRole(user?.role);
-  const resolvedTitle =
-    title ||
-    (user?.role === 'MunicipalManager'
-      ? 'Municipal Manager Dashboard'
-      : 'Waste Officer Dashboard');
 
   const getInitials = (name?: string) => {
     if (!name) {
@@ -85,11 +79,17 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
             <MenuIcon className="w-5 h-5" />
           </button>
         )}
-        <div className="flex items-center gap-1.5 text-xs">
-          <span className="text-slate-400 hidden sm:inline font-medium">Operations /</span>
-          <h1 className="text-xs sm:text-sm font-semibold text-slate-800 tracking-tight">
-            {resolvedTitle}
-          </h1>
+        {/* Search Bar UI */}
+        <div className="relative w-64 sm:w-80 md:w-96 lg:w-[420px]">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+            <SearchIcon className="w-4 h-4" />
+          </div>
+          <input
+            type="text"
+            placeholder="Search reports, bins, schedules, tasks, or complaints..."
+            readOnly
+            className="w-full pl-9 pr-4 py-2 text-xs sm:text-sm bg-white border border-slate-200/90 rounded-lg text-slate-800 placeholder-slate-400 shadow-2xs focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-colors"
+          />
         </div>
       </div>
 

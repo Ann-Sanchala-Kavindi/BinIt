@@ -8,10 +8,13 @@ import {
   ComplaintsIcon,
 } from '../../../components/ui/Icons';
 
+export type QuickActionVariant = 'amber' | 'emerald' | 'blue' | 'mint' | 'rose';
+
 export interface ActionItem {
   label: string;
   to: string;
   icon: React.ReactNode;
+  variant?: QuickActionVariant;
 }
 
 export interface QuickActionsProps {
@@ -20,31 +23,69 @@ export interface QuickActionsProps {
   actions?: ActionItem[];
 }
 
+const quickActionVariants: Record<
+  QuickActionVariant,
+  { card: string; iconContainer: string; arrow: string }
+> = {
+  amber: {
+    card: 'bg-[#FEF9F1] border-[#FDE68A] hover:border-amber-300 hover:bg-[#FEF6E9]',
+    iconContainer: 'bg-[#FEF3C7] border-amber-200/80 text-[#D97706]',
+    arrow: 'text-[#D97706] group-hover:text-amber-700',
+  },
+  emerald: {
+    card: 'bg-[#ECFDF5] border-[#A7F3D0] hover:border-emerald-300 hover:bg-[#E6FAF0]',
+    iconContainer: 'bg-[#D1FAE5] border-emerald-200/80 text-[#059669]',
+    arrow: 'text-[#059669] group-hover:text-emerald-700',
+  },
+  blue: {
+    card: 'bg-[#EDF6FE] border-[#BAE6FD] hover:border-blue-300 hover:bg-[#E4F0FD]',
+    iconContainer: 'bg-[#DBEAFE] border-blue-200/80 text-[#2563EB]',
+    arrow: 'text-[#2563EB] group-hover:text-blue-700',
+  },
+  mint: {
+    card: 'bg-[#F1FDF7] border-[#A7F3D0] hover:border-emerald-300 hover:bg-[#E6F9F0]',
+    iconContainer: 'bg-[#D1FAE5] border-emerald-200/80 text-[#10B981]',
+    arrow: 'text-[#10B981] group-hover:text-emerald-700',
+  },
+  rose: {
+    card: 'bg-[#FEF2F5] border-[#FECDD3] hover:border-rose-300 hover:bg-[#FDE8ED]',
+    iconContainer: 'bg-[#FFE4E6] border-rose-200/80 text-[#E11D48]',
+    arrow: 'text-[#E11D48] group-hover:text-rose-700',
+  },
+};
+
+const defaultVariantOrder: QuickActionVariant[] = ['amber', 'emerald', 'blue', 'mint', 'rose'];
+
 const defaultActions: ActionItem[] = [
   {
     label: 'Review Waste Reports',
     to: '/officer/waste-reports',
     icon: <ReportsIcon className="w-4 h-4" />,
+    variant: 'amber',
   },
   {
     label: 'Manage Bins',
     to: '/officer/bins',
     icon: <BinsIcon className="w-4 h-4" />,
+    variant: 'emerald',
   },
   {
     label: 'View Collection Schedules',
     to: '/officer/schedules',
     icon: <SchedulesIcon className="w-4 h-4" />,
+    variant: 'blue',
   },
   {
     label: 'View Collection Tasks',
     to: '/officer/tasks',
     icon: <TasksIcon className="w-4 h-4" />,
+    variant: 'mint',
   },
   {
     label: 'Review Complaints',
     to: '/officer/complaints',
     icon: <ComplaintsIcon className="w-4 h-4" />,
+    variant: 'rose',
   },
 ];
 
@@ -67,31 +108,36 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-        {actions.map((act) => (
-          <Link
-            key={act.to}
-            to={act.to}
-            className="group flex items-center justify-between p-3 rounded-xl border border-teal-200/70 bg-teal-50/40 hover:bg-teal-50/90 hover:border-teal-300 hover:shadow-xs transition-all focus:outline-none focus:ring-2 focus:ring-teal-500"
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div
-                className="w-9 h-9 rounded-full bg-white border border-teal-200/80 text-teal-800 flex items-center justify-center shrink-0 group-hover:bg-teal-100 group-hover:text-teal-900 transition-colors shadow-2xs"
+        {actions.map((act, idx) => {
+          const v = act.variant || defaultVariantOrder[idx % defaultVariantOrder.length];
+          const styles = quickActionVariants[v];
+
+          return (
+            <Link
+              key={act.to}
+              to={act.to}
+              className={`group flex items-center justify-between p-3 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs ${styles.card}`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div
+                  className={`w-9 h-9 rounded-full border flex items-center justify-center shrink-0 transition-colors shadow-2xs ${styles.iconContainer}`}
+                  aria-hidden="true"
+                >
+                  {act.icon}
+                </div>
+                <span className="text-xs font-semibold text-slate-800 group-hover:text-slate-950 transition-colors leading-snug truncate">
+                  {act.label}
+                </span>
+              </div>
+              <span
+                className={`group-hover:translate-x-0.5 transition-transform text-xs font-bold shrink-0 ml-2 ${styles.arrow}`}
                 aria-hidden="true"
               >
-                {act.icon}
-              </div>
-              <span className="text-xs font-semibold text-slate-800 group-hover:text-teal-950 transition-colors leading-snug truncate">
-                {act.label}
+                &rarr;
               </span>
-            </div>
-            <span
-              className="text-teal-500 group-hover:text-teal-700 group-hover:translate-x-0.5 transition-transform text-xs font-bold shrink-0 ml-2"
-              aria-hidden="true"
-            >
-              &rarr;
-            </span>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

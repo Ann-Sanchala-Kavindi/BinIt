@@ -1,7 +1,9 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { CloseIcon, LeafIcon } from '../ui/Icons';
+import { CloseIcon } from '../ui/Icons';
 import { defaultOfficerNavItems, type NavItem } from './navConfig';
+import logoImg from '../../assets/logo.png';
+import sidebarIllustration from '../../assets/sidebar-illustration.png';
 
 export type { NavItem };
 
@@ -20,12 +22,11 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
       {/* Brand Header */}
       <div className="h-16 flex items-center justify-between px-6 border-b border-white/10 shrink-0">
         <div className="flex items-center gap-2.5">
-          <div
-            className="w-8 h-8 rounded-lg bg-emerald-500 text-white flex items-center justify-center font-bold text-sm shadow-xs"
-            aria-hidden="true"
-          >
-            SW
-          </div>
+          <img
+            src={logoImg}
+            alt="SmartWaste Logo"
+            className="w-8 h-8 object-contain shrink-0"
+          />
           <div>
             <span className="font-bold text-white tracking-tight block text-base leading-tight">
               SmartWaste
@@ -85,17 +86,17 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
         ))}
       </nav>
 
-      {/* Environmental Motto Banner */}
-      <div className="px-5 py-3.5 border-t border-white/5 bg-white/[0.03] flex items-center gap-3 shrink-0">
-        <div
-          className="w-8 h-8 rounded-lg bg-emerald-800/60 text-emerald-300 flex items-center justify-center shrink-0 shadow-2xs"
-          aria-hidden="true"
-        >
-          <LeafIcon className="w-4 h-4 text-emerald-300" />
-        </div>
-        <div className="text-xs leading-tight">
-          <p className="font-semibold text-white">Cleaner Communities</p>
-          <p className="text-[11px] text-emerald-300/80">Brighter Tomorrows</p>
+      {/* Environmental Motto Banner with Illustration */}
+      <div className="px-5 pt-2 pb-5 mt-auto flex flex-col shrink-0">
+        <img
+          src={sidebarIllustration}
+          alt="Cleaner Communities"
+          className="w-full max-w-[150px] max-h-[110px] object-contain mx-auto mb-2 pointer-events-none select-none"
+        />
+        <div className="text-sm font-bold text-white leading-tight tracking-tight">
+          <p>Cleaner</p>
+          <p>Communities</p>
+          <p className="text-emerald-100/90 font-semibold mt-0.5">Brighter Tomorrows</p>
         </div>
       </div>
     </aside>
