@@ -116,12 +116,17 @@ Registers a new citizen account. Publicly accessible.
 Authenticates an active user and returns an access token.
 
 - **Access:** Public
+- **Platform Enforcements:** Supports `clientType` (`"web"` | `"mobile"`).
+  - Web client allows only `WasteOfficer` and `MunicipalManager`.
+  - Mobile client allows only `Citizen` and `Driver`.
+  - Incompatible platform login attempts are rejected with `403 Forbidden` (`ProblemDetails`) and issue no JWT.
 
 #### Request Body
 ```json
 {
   "email": "kamal@example.com",
-  "password": "Password123!"
+  "password": "Password123!",
+  "clientType": "web"
 }
 ```
 
@@ -130,18 +135,43 @@ Authenticates an active user and returns an access token.
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIs...",
   "expiresAt": "2026-09-08T18:00:00Z",
+  "mustChangePassword": false,
   "user": {
     "id": "c1f728c4-e4c1-424a-8d38-9cfb2e652a91",
     "fullName": "Kamal Silva",
     "email": "kamal@example.com",
-    "role": "Citizen"
+    "role": "WasteOfficer",
+    "mustChangePassword": false
   }
 }
 ```
 
 ---
 
-### 2.3 `GET /api/v1/auth/me` `[Implemented]`
+### 2.3 `POST /api/v1/auth/change-password` `[Implemented]`
+Changes the authenticated user's password. Required when `MustChangePassword` is `true` before accessing business resources.
+
+- **Access:** Authenticated
+- **Validation:** Current password must be verified; new password must be at least 8 characters with uppercase, lowercase, digit, and non-alphanumeric character.
+
+#### Request Body
+```json
+{
+  "currentPassword": "OldPassword123!",
+  "newPassword": "NewPassword123!"
+}
+```
+
+#### Response `200 OK`
+```json
+{
+  "message": "Password changed successfully. Please log in with your new password."
+}
+```
+
+---
+
+### 2.4 `GET /api/v1/auth/me` `[Implemented]`
 Retrieves current profile information for the authenticated user.
 
 - **Access:** Authenticated (`Citizen`, `WasteOfficer`, `Driver`, `MunicipalManager`)
@@ -153,15 +183,91 @@ Retrieves current profile information for the authenticated user.
   "fullName": "Kamal Silva",
   "email": "kamal@example.com",
   "phoneNumber": "+94771234567",
-  "role": "Citizen",
+  "role": "WasteOfficer",
   "isActive": true,
+  "mustChangePassword": false,
   "createdAt": "2026-09-08T07:30:00Z"
 }
 ```
 
 ---
 
-### 2.4 `GET /api/v1/dev/ai-health` `[Implemented]`
+### 2.5 User Management Endpoints `[Implemented]`
+
+Internal staff account administration managed exclusively by Municipal Managers.
+
+#### `GET /api/v1/users`
+Retrieves a paginated list of internal staff users.
+
+- **Access:** `MunicipalManager`
+- **Query Parameters:** `page` (default 1), `pageSize` (default 15), `search`, `role`, `isActive`
+- **Response `200 OK`:**
+```json
+{
+  "items": [
+    {
+      "id": "a53e6cf1-d419-4f71-a0ea-439ff2e43486",
+      "fullName": "Saman Driver",
+      "email": "saman@smartwaste.local",
+      "username": "saman_driver",
+      "role": "Driver",
+      "isActive": true,
+      "mustChangePassword": true,
+      "createdAt": "2026-09-10T06:00:00Z"
+    }
+  ],
+  "page": 1,
+  "pageSize": 15,
+  "totalCount": 1,
+  "totalPages": 1
+}
+```
+
+#### `POST /api/v1/users`
+Provisions an internal staff account (`Driver`, `WasteOfficer`, or `MunicipalManager`). Rejects `Citizen` role (public registration only). Cryptographically generates a secure 16-character temporary password returned strictly once in the creation response.
+
+- **Access:** `MunicipalManager`
+- **Request Body:**
+```json
+{
+  "fullName": "Saman Perera",
+  "email": "saman.driver@smartwaste.local",
+  "username": "saman_driver",
+  "role": "Driver"
+}
+```
+- **Response `201 Created`:**
+```json
+{
+  "user": {
+    "id": "a53e6cf1-d419-4f71-a0ea-439ff2e43486",
+    "fullName": "Saman Perera",
+    "email": "saman.driver@smartwaste.local",
+    "username": "saman_driver",
+    "role": "Driver",
+    "isActive": true,
+    "mustChangePassword": true,
+    "createdAt": "2026-09-10T06:00:00Z"
+  },
+  "temporaryPassword": "pW#9xK!2mQ$7vL@1"
+}
+```
+
+#### `PATCH /api/v1/users/{id}/status`
+Toggles account status (`isActive`). Prevents managers from deactivating their own account.
+
+- **Access:** `MunicipalManager`
+- **Request Body:**
+```json
+{
+  "isActive": false
+}
+```
+- **Response `200 OK`:** Updated `UserManagementDto` object.
+
+---
+
+### 2.6 `GET /api/v1/dev/ai-health` `[Implemented]`
 Development-only diagnostic endpoint verifying ASP.NET Core → FastAPI AI service connectivity.
 
 - **Access:** Public (Only active in `Development` environment; returns `404 NotFound` in `Production`).

@@ -1,6 +1,9 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { Card } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
+import { Alert } from '../components/ui/Alert';
 
 export const HomePage: React.FC = () => {
   const { user, logout } = useAuthStore();
@@ -12,109 +15,56 @@ export const HomePage: React.FC = () => {
   };
 
   return (
-    <div style={homeStyles.container}>
-      <div style={homeStyles.card}>
-        <h2 style={homeStyles.heading}>Smart Waste Management System</h2>
-        <div style={homeStyles.welcomeBox}>
-          <p style={homeStyles.welcomeText}>
-            Welcome, <strong>{user?.fullName || 'User'}</strong>
+    <div className="py-4">
+      <Card className="max-w-2xl mx-auto">
+        <h2 className="text-2xl font-bold text-emerald-700 mb-6">
+          Smart Waste Management System
+        </h2>
+
+        <div className="bg-slate-50 rounded-lg border border-slate-200 p-5 mb-6 space-y-2">
+          <p className="text-base text-slate-800">
+            Welcome, <strong className="font-semibold text-slate-950">{user?.fullName || 'User'}</strong>
           </p>
-          <p style={homeStyles.roleText}>
-            Role: <span style={homeStyles.roleBadge}>{user?.role}</span>
+          <p className="text-sm text-slate-600 flex items-center gap-2">
+            Role:{' '}
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+              {user?.role}
+            </span>
           </p>
-          <p style={homeStyles.emailText}>Email: {user?.email}</p>
+          <p className="text-xs text-slate-500">Email: {user?.email}</p>
         </div>
 
-        <div style={homeStyles.infoBox}>
-          <p style={homeStyles.infoNotice}>
-            <strong>Authentication Foundation Ready:</strong> You are securely logged in.
-            Business modules (Waste Reporting, Bin Monitoring, Collection Fleet, Complaints, AI Services)
-            will be mounted in subsequent steps.
-          </p>
-        </div>
+        {user?.role === 'WasteOfficer' && (
+          <div className="mb-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-emerald-900">
+                Waste Officer Console
+              </p>
+              <p className="text-xs text-emerald-700 mt-0.5">
+                Access daily waste reports, bin monitoring, and collection tasks.
+              </p>
+            </div>
+            <Link
+              to="/officer/dashboard"
+              className="shrink-0 inline-flex items-center gap-1 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors"
+            >
+              Open Dashboard &rarr;
+            </Link>
+          </div>
+        )}
 
-        <div style={homeStyles.actions}>
-          <button onClick={handleLogout} style={homeStyles.logoutBtn} type="button">
+        <Alert variant="info" className="mb-6">
+          <strong className="font-semibold">Authentication Foundation Ready:</strong> You
+          are securely logged in. Business modules (Waste Reporting, Bin Monitoring,
+          Collection Fleet, Complaints, AI Services) will be mounted in subsequent steps.
+        </Alert>
+
+        <div className="flex gap-3">
+          <Button variant="danger" size="md" onClick={handleLogout}>
             Logout
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
     </div>
   );
-};
-
-const homeStyles: Record<string, React.CSSProperties> = {
-  container: {
-    padding: '1rem 0',
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    padding: '2.5rem',
-    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-    border: '1px solid #e2e8f0',
-  },
-  heading: {
-    margin: '0 0 1.5rem 0',
-    fontSize: '1.75rem',
-    fontWeight: 700,
-    color: '#15803d',
-  },
-  welcomeBox: {
-    backgroundColor: '#f8fafc',
-    padding: '1.25rem',
-    borderRadius: '8px',
-    border: '1px solid #e2e8f0',
-    marginBottom: '1.5rem',
-  },
-  welcomeText: {
-    margin: '0 0 0.5rem 0',
-    fontSize: '1.125rem',
-    color: '#1e293b',
-  },
-  roleText: {
-    margin: '0 0 0.5rem 0',
-    fontSize: '1rem',
-    color: '#475569',
-  },
-  roleBadge: {
-    padding: '0.2rem 0.6rem',
-    backgroundColor: '#dcfce7',
-    color: '#15803d',
-    borderRadius: '9999px',
-    fontWeight: 600,
-    fontSize: '0.875rem',
-  },
-  emailText: {
-    margin: 0,
-    fontSize: '0.875rem',
-    color: '#64748b',
-  },
-  infoBox: {
-    backgroundColor: '#eff6ff',
-    border: '1px solid #bfdbfe',
-    borderRadius: '8px',
-    padding: '1rem 1.25rem',
-    marginBottom: '2rem',
-  },
-  infoNotice: {
-    margin: 0,
-    fontSize: '0.9rem',
-    color: '#1e40af',
-    lineHeight: 1.5,
-  },
-  actions: {
-    display: 'flex',
-    gap: '1rem',
-  },
-  logoutBtn: {
-    padding: '0.625rem 1.25rem',
-    fontSize: '0.95rem',
-    fontWeight: 600,
-    color: '#dc2626',
-    backgroundColor: '#fee2e2',
-    border: '1px solid #fca5a5',
-    borderRadius: '6px',
-    cursor: 'pointer',
-  },
 };

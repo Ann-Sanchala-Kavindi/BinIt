@@ -74,20 +74,26 @@ public class AuthService : IAuthService
         {
             AccessToken = token,
             ExpiresAt = expiresAt,
+            MustChangePassword = false,
             User = new UserDto
             {
                 Id = user.Id,
                 FullName = user.FullName,
                 Email = user.Email ?? string.Empty,
-                Role = AppRoles.Citizen
+                Username = user.UserName,
+                Role = AppRoles.Citizen,
+                MustChangePassword = false
             }
         };
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
     {
-        // 1. Locate user by email
-        var user = await _userManager.FindByEmailAsync(request.Email);
+        // 1. Locate user by email or username
+        var identifier = !string.IsNullOrWhiteSpace(request.Username) ? request.Username.Trim() : request.Email.Trim();
+        var user = await _userManager.FindByEmailAsync(identifier)
+                   ?? await _userManager.FindByNameAsync(identifier);
+
         if (user == null)
         {
             throw new InvalidCredentialsException();
@@ -110,21 +116,68 @@ public class AuthService : IAuthService
         var roles = await _userManager.GetRolesAsync(user);
         var primaryRole = roles.FirstOrDefault() ?? AppRoles.Citizen;
 
-        // 5. Generate token
+        // 5. Verify role is supported by clientType
+        if (!string.IsNullOrWhiteSpace(request.ClientType))
+        {
+            var clientType = request.ClientType.Trim().ToLowerInvariant();
+            if (clientType == ClientTypes.Web)
+            {
+                if (primaryRole is AppRoles.Citizen or AppRoles.Driver)
+                {
+                    throw new UnsupportedClientRoleException("This account is for the SmartWaste mobile application.");
+                }
+            }
+            else if (clientType == ClientTypes.Mobile)
+            {
+                if (primaryRole is AppRoles.WasteOfficer or AppRoles.MunicipalManager)
+                {
+                    throw new UnsupportedClientRoleException("This account is for the SmartWaste web application.");
+                }
+            }
+        }
+
+        // 6. Generate token
         var token = GenerateJwtToken(user, roles, out var expiresAt);
 
         return new AuthResponse
         {
             AccessToken = token,
             ExpiresAt = expiresAt,
+            MustChangePassword = user.MustChangePassword,
             User = new UserDto
             {
                 Id = user.Id,
                 FullName = user.FullName,
                 Email = user.Email ?? string.Empty,
-                Role = primaryRole
+                Username = user.UserName,
+                Role = primaryRole,
+                MustChangePassword = user.MustChangePassword
             }
         };
+    }
+
+    public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request)
+    {
+        var user = await _userManager.FindByIdAsync(userId.ToString());
+        if (user == null)
+        {
+            throw new NotFoundException("User not found.");
+        }
+
+        var result = await _userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+        if (!result.Succeeded)
+        {
+            if (result.Errors.Any(e => e.Code == "PasswordMismatch"))
+            {
+                throw new InvalidCredentialsException("Current password is incorrect.");
+            }
+
+            throw new IdentityOperationException(result.Errors.Select(e => e.Description));
+        }
+
+        user.MustChangePassword = false;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _userManager.UpdateAsync(user);
     }
 
     public async Task<CurrentUserResponse> GetCurrentUserAsync(Guid userId)
@@ -178,7 +231,8 @@ public class AuthService : IAuthService
             new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
             new(ClaimTypes.Email, user.Email ?? string.Empty),
             new(ClaimTypes.Name, user.FullName),
-            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new("must_change_password", user.MustChangePassword ? "True" : "False")
         };
 
         foreach (var role in roles)

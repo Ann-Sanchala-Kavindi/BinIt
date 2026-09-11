@@ -25,6 +25,11 @@ public interface IAuthService
     Task<CurrentUserResponse> GetCurrentUserAsync(Guid userId);
 
     /// <summary>
+    /// Changes the password of an authenticated user. Validates current password and updates MustChangePassword flag to false.
+    /// </summary>
+    Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request);
+
+    /// <summary>
     /// Generates a signed JWT bearer token containing user claims and roles.
     /// </summary>
     string GenerateJwtToken(AppUser user, IList<string> roles, out DateTime expiresAt);

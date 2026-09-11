@@ -15,3 +15,11 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+
+## Design System & UI Architecture
+
+SmartWaste Flutter uses a centralized design system aligned with the web product identity:
+- **Theme Tokens**: Located in `lib/core/theme/` (`app_colors.dart`, `app_typography.dart`, `app_spacing.dart`, `app_theme.dart`).
+- **Shared Widgets**: Located in `lib/shared/widgets/` (`AppButton`, `AppTextField`, `AppCard`, `AppAlert`, `AppLoadingIndicator`).
+- **UI Consistency Rule**: All new screens must reuse these theme tokens and shared primitives to maintain brand consistency, responsiveness, and accessibility across the application. Avoid repeated hard-coded colors or local widget duplications.
+

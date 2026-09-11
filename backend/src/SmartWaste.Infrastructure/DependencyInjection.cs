@@ -53,6 +53,7 @@ public static class DependencyInjection
 
         // Register application services
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IUserService, UserService>();
 
         // Internal FastAPI AI Service typed client registration
         var aiSection = configuration.GetSection(AiServiceOptions.SectionName);

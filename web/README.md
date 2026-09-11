@@ -30,3 +30,9 @@ If you are developing a production application, we recommend enabling type-aware
 ```
 
 See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+
+## UI & Styling
+- **Styling Standard**: Tailwind CSS v4 via `@tailwindcss/vite`.
+- **Operational Visual Language**: The WasteOfficer dashboard establishes the SmartWaste operational visual language (deep forest sidebar with active indicator, white surfaces, light cool-gray canvas, restrained emerald accents).
+- **Reusable Layout & Primitives**: Shared theme tokens (`@theme` in `src/index.css`), layout shells (`DashboardLayout`, `DashboardSidebar`, `DashboardHeader`), and UI primitives in `src/components/ui/` should be reused. Future React pages must follow this visual style.
+

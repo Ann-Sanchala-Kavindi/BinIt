@@ -131,6 +131,7 @@ app.UseHttpsRedirection();
 app.UseCors("DevCors");
 
 app.UseAuthentication();
+app.UseMiddleware<MustChangePasswordMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

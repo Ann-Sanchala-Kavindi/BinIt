@@ -1,4 +1,4 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/features/auth/models/auth_response.dart';
 import 'package:mobile/features/auth/models/auth_user.dart';
 
@@ -85,13 +85,36 @@ void main() {
           fullName: 'Test User',
           email: 'test@binit.lk',
           role: 'Citizen',
+          mustChangePassword: true,
         ),
+        mustChangePassword: true,
       );
 
       final json = response.toJson();
       expect(json['accessToken'], 'token-abc');
       expect(json['expiresAt'], '2026-09-07T12:00:00.000Z');
       expect(json['user']['fullName'], 'Test User');
+      expect(json['user']['mustChangePassword'], isTrue);
+      expect(json['mustChangePassword'], isTrue);
+    });
+
+    test('deserializes mustChangePassword correctly from AuthResponse', () {
+      final json = {
+        'accessToken': 'token-xyz',
+        'expiresAt': '2026-09-07T12:00:00.000Z',
+        'mustChangePassword': true,
+        'user': {
+          'id': 'u-2',
+          'fullName': 'Driver User',
+          'email': 'driver@binit.lk',
+          'role': 'Driver',
+        },
+      };
+
+      final response = AuthResponse.fromJson(json);
+      expect(response.mustChangePassword, isTrue);
+      expect(response.user.mustChangePassword, isTrue);
+      expect(response.user.isDriver, isTrue);
     });
   });
 }

@@ -30,6 +30,10 @@ public class AppDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
             entity.Property(u => u.IsActive)
                 .HasDefaultValue(true);
 
+            entity.Property(u => u.MustChangePassword)
+                .HasDefaultValue(false)
+                .IsRequired();
+
             entity.Property(u => u.CreatedAt)
                 .IsRequired();
         });

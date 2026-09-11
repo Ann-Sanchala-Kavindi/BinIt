@@ -38,6 +38,7 @@ Extends `IdentityUser<Guid>`. Core user entity managed by ASP.NET Core Identity.
 | `PasswordHash` | `string` | Yes | Inherited from Identity (hashed with PBKDF2). |
 | `FullName` | `string` | No | User's display name (`varchar(150)`). |
 | `IsActive` | `bool` | No | Account status flag (default: `true`). |
+| `MustChangePassword` | `bool` | No | Mandatory first-login password change flag (default: `false`, set to `true` for manager-provisioned internal accounts). |
 | `CreatedAt` | `DateTime` | No | UTC registration timestamp. |
 | `UpdatedAt` | `DateTime` | Yes | UTC timestamp of last modification. |
 

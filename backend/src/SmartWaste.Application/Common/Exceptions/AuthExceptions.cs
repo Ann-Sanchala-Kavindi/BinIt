@@ -42,3 +42,37 @@ public class IdentityOperationException : Exception
         Errors = errors;
     }
 }
+
+public class UnsupportedClientRoleException : Exception
+{
+    public string ErrorCode { get; } = "unsupported_client_role";
+
+    public UnsupportedClientRoleException(string message)
+        : base(message)
+    {
+    }
+}
+
+public class PasswordChangeRequiredException : Exception
+{
+    public PasswordChangeRequiredException(string message = "Password change required before accessing this resource.")
+        : base(message)
+    {
+    }
+}
+
+public class InvalidRoleException : Exception
+{
+    public InvalidRoleException(string message)
+        : base(message)
+    {
+    }
+}
+
+public class UserManagementException : Exception
+{
+    public UserManagementException(string message)
+        : base(message)
+    {
+    }
+}

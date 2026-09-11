@@ -24,6 +24,7 @@ class AuthUser {
   final String? phoneNumber;
   final bool? isActive;
   final DateTime? createdAt;
+  final bool mustChangePassword;
 
   const AuthUser({
     required this.id,
@@ -33,6 +34,7 @@ class AuthUser {
     this.phoneNumber,
     this.isActive,
     this.createdAt,
+    this.mustChangePassword = false,
   });
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
@@ -46,6 +48,7 @@ class AuthUser {
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString())
           : null,
+      mustChangePassword: json['mustChangePassword'] as bool? ?? false,
     );
   }
 
@@ -55,6 +58,7 @@ class AuthUser {
       'fullName': fullName,
       'email': email,
       'role': role,
+      'mustChangePassword': mustChangePassword,
       if (phoneNumber != null) 'phoneNumber': phoneNumber,
       if (isActive != null) 'isActive': isActive,
       if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),

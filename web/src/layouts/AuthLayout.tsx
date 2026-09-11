@@ -3,51 +3,35 @@ import { Outlet } from 'react-router-dom';
 
 export const AuthLayout: React.FC = () => {
   return (
-    <div style={authStyles.container}>
-      <div style={authStyles.card}>
-        <div style={authStyles.header}>
-          <h1 style={authStyles.title}>Smart Waste Management</h1>
-          <p style={authStyles.subtitle}>Clean, efficient municipal waste operations</p>
+    <div className="min-h-screen flex items-center justify-center bg-slate-100/80 px-4 py-8 sm:px-6 lg:px-8">
+      <div className="w-full max-w-md bg-white rounded-xl shadow-sm border border-slate-200 p-6 sm:p-8">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 mb-3">
+            <svg
+              className="w-6 h-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight text-emerald-700">
+            Smart Waste Management
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Clean, efficient municipal waste operations
+          </p>
         </div>
         <Outlet />
       </div>
     </div>
   );
-};
-
-const authStyles: Record<string, React.CSSProperties> = {
-  container: {
-    minHeight: '100vh',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
-    padding: '1.5rem',
-    fontFamily: 'system-ui, -apple-system, sans-serif',
-    boxSizing: 'border-box',
-  },
-  card: {
-    width: '100%',
-    maxWidth: '440px',
-    backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    padding: '2rem',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)',
-    border: '1px solid #e2e8f0',
-  },
-  header: {
-    textAlign: 'center',
-    marginBottom: '1.75rem',
-  },
-  title: {
-    margin: '0 0 0.5rem 0',
-    fontSize: '1.5rem',
-    fontWeight: 700,
-    color: '#15803d',
-  },
-  subtitle: {
-    margin: 0,
-    fontSize: '0.875rem',
-    color: '#64748b',
-  },
 };

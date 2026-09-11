@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
@@ -12,8 +12,10 @@ using SmartWaste.Application.DTOs.Ai;
 using SmartWaste.Application.Interfaces;
 
 namespace SmartWaste.Tests;
+using Xunit;
 
-public class DevAiHealthEndpointTests : IClassFixture<CustomWebApplicationFactory>
+[Collection(IntegrationTestCollection.Name)]
+public class DevAiHealthEndpointTests
 {
     private readonly CustomWebApplicationFactory _factory;
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };

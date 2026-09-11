@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/network/api_exception.dart';
 
@@ -82,7 +82,7 @@ void main() {
       );
       final apiException403 = ApiException.fromDioError(dioException403);
       expect(apiException403.statusCode, 403);
-      expect(apiException403.message, contains('Access denied'));
+      expect(apiException403.message, 'Access denied. Your account lacks required permissions.');
 
       final dioException404 = DioException(
         requestOptions: requestOptions,
@@ -92,6 +92,78 @@ void main() {
       final apiException404 = ApiException.fromDioError(dioException404);
       expect(apiException404.statusCode, 404);
       expect(apiException404.message, contains('not found'));
+    });
+
+    test('maps 403 with unsupported_client_role errorCode to web application message', () {
+      final requestOptions = RequestOptions(path: '/api/v1/auth/login');
+      final dioException = DioException(
+        requestOptions: requestOptions,
+        type: DioExceptionType.badResponse,
+        response: Response(
+          requestOptions: requestOptions,
+          statusCode: 403,
+          data: {
+            'type': 'https://httpstatuses.com/403',
+            'title': 'Unsupported Client Role',
+            'status': 403,
+            'detail': 'This account is for the SmartWaste web application.',
+            'instance': '/api/v1/auth/login',
+            'errorCode': 'unsupported_client_role',
+          },
+        ),
+      );
+
+      final apiException = ApiException.fromDioError(dioException);
+
+      expect(apiException.statusCode, 403);
+      expect(apiException.errorCode, 'unsupported_client_role');
+      expect(apiException.message, 'This account is for the SmartWaste web application.');
+    });
+
+    test('maps 403 with extensions.errorCode unsupported_client_role to web application message', () {
+      final requestOptions = RequestOptions(path: '/api/v1/auth/login');
+      final dioException = DioException(
+        requestOptions: requestOptions,
+        type: DioExceptionType.badResponse,
+        response: Response(
+          requestOptions: requestOptions,
+          statusCode: 403,
+          data: {
+            'title': 'Unsupported Client Role',
+            'status': 403,
+            'detail': 'This account is for the SmartWaste web application.',
+            'extensions': {'errorCode': 'unsupported_client_role'},
+          },
+        ),
+      );
+
+      final apiException = ApiException.fromDioError(dioException);
+
+      expect(apiException.statusCode, 403);
+      expect(apiException.errorCode, 'unsupported_client_role');
+      expect(apiException.message, 'This account is for the SmartWaste web application.');
+    });
+
+    test('retains generic access-denied message for unrelated 403 errors', () {
+      final requestOptions = RequestOptions(path: '/api/v1/protected-resource');
+      final dioException = DioException(
+        requestOptions: requestOptions,
+        type: DioExceptionType.badResponse,
+        response: Response(
+          requestOptions: requestOptions,
+          statusCode: 403,
+          data: {
+            'title': 'Forbidden',
+            'status': 403,
+            'detail': 'User does not have role X.',
+          },
+        ),
+      );
+
+      final apiException = ApiException.fromDioError(dioException);
+
+      expect(apiException.statusCode, 403);
+      expect(apiException.message, 'Access denied. Your account lacks required permissions.');
     });
 
     test('handles 409 Conflict', () {
