@@ -279,87 +279,358 @@ Development-only diagnostic endpoint verifying ASP.NET Core → FastAPI AI servi
 ## 3. Component 1 — Waste Reporting & Citizen Management
 
 ### 3.1 `POST /api/v1/waste-reports` `[Planned]`
-Submits a new waste report with description, location, and waste classification.
+Submits a new waste report with description, waste type, and geospatial coordinates.
 
-- **Access:** `Citizen`
-- **Request Body:**
+- **Access:** `Citizen` only
+- **Validation Rules:**
+  - `description`: Required, 10 to 1,000 characters.
+  - `wasteType`: Required, must be a valid `WasteType` enum value (`General`, `Organic`, `Recyclable`, `Hazardous`, `Bulky`, `Other`).
+  - `latitude`: Required, range `-90.0` to `90.0`.
+  - `longitude`: Required, range `-180.0` to `180.0`.
+  - `addressText`: Optional, maximum 500 characters.
+- **Server-Controlled Fields (Clients MUST NOT provide):**
+  - `citizenId`: Extracted authoritatively by backend from authenticated JWT claims (`sub`/`NameIdentifier`).
+  - `status`: Set authoritatively to `Submitted`.
+  - `priority`: Formalized as nullable enum `WasteReportPriority?` (`Low`, `Medium`, `High`, `Urgent`). Defaults to `null`. Priority remains null during Component 1 verification and may later be assigned only through authoritative ASP.NET business logic after operational/AI-assisted planning (AI may recommend but never persist it directly).
+  - `verifiedByUserId`, `verifiedAt`: Default to `null`.
+  - `attachmentUrls`: Attachments are uploaded via dedicated `POST /api/v1/waste-reports/{id}/attachments`.
+- **Atomic Transaction:**
+  1. Inserts `WasteReport` in `Submitted` status.
+  2. Inserts initial `WasteReportStatusHistory` (`fromStatus = null`, `toStatus = "Submitted"`, `changedByUserId = CitizenId`, `changedAt = CreatedAt`).
+
+#### Request Body
 ```json
 {
   "description": "Large garbage heap overflowing near bus stand",
   "wasteType": "General",
   "latitude": 6.9271,
   "longitude": 79.8612,
-  "addressText": "Main Street, Pettah",
-  "attachmentUrls": [
-    "https://storage.smartwaste.lk/reports/2026/09/dump1.jpg"
-  ]
+  "addressText": "Main Street, Pettah"
 }
 ```
-- **Response `201 Created`:** Full `WasteReportDto` in status `Submitted`.
+
+#### Response `201 Created`
+```json
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "citizenId": "1fa85f64-5717-4562-b3fc-2c963f66afa1",
+  "description": "Large garbage heap overflowing near bus stand",
+  "wasteType": "General",
+  "latitude": 6.9271,
+  "longitude": 79.8612,
+  "addressText": "Main Street, Pettah",
+  "status": "Submitted",
+  "priority": null,
+  "verifiedByUserId": null,
+  "verifiedByUserName": null,
+  "verifiedAt": null,
+  "attachments": [],
+  "createdAt": "2026-09-15T08:30:00Z",
+  "updatedAt": null
+}
+```
 
 ---
 
 ### 3.2 `GET /api/v1/waste-reports` `[Planned]`
-Lists waste reports with pagination and filtering.
+Lists waste reports with pagination, search, domain filtering, and sorting.
 
 - **Access:** Authenticated
-  - `Citizen`: Filtered strictly to reports submitted by the caller.
-  - `WasteOfficer`, `MunicipalManager`: Unrestricted access across all citizen reports.
-- **Query Parameters:** `page`, `pageSize`, `status`, `wasteType`, `fromDate`, `toDate`.
-- **Response `200 OK`:** `PagedResult<WasteReportSummaryDto>`.
+  - `Citizen`: Scoped strictly to reports submitted by the caller (`CitizenId == currentUserId`). Query parameters cannot circumvent this boundary.
+  - `WasteOfficer`, `MunicipalManager`: Unrestricted operational scope across all citizen reports.
+  - `Driver`: `403 Forbidden`.
+- **Query Parameters:**
+  - `page` (int, default: `1`, minimum: `1`)
+  - `pageSize` (int, default: `20`, maximum: `100`)
+  - `status` (string, optional): Filter by `WasteReportStatus`.
+  - `wasteType` (string, optional): Filter by `WasteType`.
+  - `search` (string, optional): Case-insensitive substring search matching `description` or `addressText`.
+  - `sortBy` (string, optional, default: `"createdAt"`): Allowed values: `"createdAt"`, `"updatedAt"`.
+  - `sortDirection` (string, optional, default: `"desc"`): Allowed values: `"asc"`, `"desc"`.
+
+#### Response `200 OK` (`PagedResult<WasteReportSummaryDto>`)
+```json
+{
+  "items": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "description": "Large garbage heap overflowing near bus stand",
+      "wasteType": "General",
+      "status": "Submitted",
+      "priority": null,
+      "addressText": "Main Street, Pettah",
+      "latitude": 6.9271,
+      "longitude": 79.8612,
+      "citizenId": "1fa85f64-5717-4562-b3fc-2c963f66afa1",
+      "citizenName": "Kamal Perera",
+      "createdAt": "2026-09-15T08:30:00Z",
+      "updatedAt": null
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 1,
+  "totalPages": 1
+}
+```
+*(Note: `citizenId` and `citizenName` are exposed in summary items only to `WasteOfficer` and `MunicipalManager`; for `Citizen` callers, these fields are omitted or match own identity).*
 
 ---
 
 ### 3.3 `GET /api/v1/waste-reports/{id}` `[Planned]`
-Retrieves full details of a specific report including attachments and current status.
+Retrieves full details of a specific report including photographic attachments and verification metadata.
 
-- **Access:** `Citizen` (Owner only), `WasteOfficer`, `MunicipalManager`.
-- **Response `200 OK`:** Full `WasteReportDetailDto`.
+- **Access:**
+  - `Citizen`: Report owner only (`CitizenId == currentUserId`). Access attempts to reports belonging to other citizens return `404 NotFound`.
+  - `WasteOfficer`, `MunicipalManager`: Any report across municipal jurisdiction.
+  - `Driver`: `403 Forbidden`.
+
+#### Response `200 OK` (`WasteReportDetailDto`)
+```json
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "citizenId": "1fa85f64-5717-4562-b3fc-2c963f66afa1",
+  "citizenName": "Kamal Perera",
+  "description": "Large garbage heap overflowing near bus stand",
+  "wasteType": "General",
+  "latitude": 6.9271,
+  "longitude": 79.8612,
+  "addressText": "Main Street, Pettah",
+  "status": "Submitted",
+  "priority": null,
+  "verifiedByUserId": null,
+  "verifiedByUserName": null,
+  "verifiedAt": null,
+  "attachments": [
+    {
+      "id": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
+      "wasteReportId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "fileUrl": "https://storage.smartwaste.local/reports/3fa85f64-5717-4562-b3fc-2c963f66afa6/dump1.jpg?token=...",
+      "fileType": "image/jpeg",
+      "createdAt": "2026-09-15T08:31:00Z"
+    }
+  ],
+  "createdAt": "2026-09-15T08:30:00Z",
+  "updatedAt": null
+}
+```
 
 ---
 
 ### 3.4 `PATCH /api/v1/waste-reports/{id}` `[Planned]`
-Updates report metadata. Citizens can update only while report is in `Submitted` status. Officers can update priority or notes.
+Updates citizen-submitted evidence. Editable **strictly** by the owner Citizen and **only** while the report remains in `Submitted` status.
 
-- **Access:** `Citizen` (Owner), `WasteOfficer`.
-- **Response `200 OK`:** Updated `WasteReportDto`.
+- **Access:** `Citizen` (Owner only). `WasteOfficer`, `MunicipalManager`, and `Driver` receive `403 Forbidden`.
+- **Precondition:** Report `Status` must be `Submitted`. Once status transitions to `UnderReview` or later, evidence is permanently locked; attempts return `409 Conflict`.
+- **Allowed Editable Fields:** `description`, `wasteType`, `latitude`, `longitude`, `addressText`.
+- **Minimum Field Requirement:** At least one editable field must be provided. An entirely empty payload `{}` or payload with all fields null is rejected with `400 BadRequest`.
+- **Partial Update (`addressText`) Contract:**
+  - Omitted or `null`: No change to the existing address.
+  - Empty string `""`: Explicit request to clear the existing address (the application service normalizes `""` to `null` before persistence). Counts as an explicit update field.
+  - Non-empty string: Updates address text (maximum 500 characters).
+- **Forbidden Server Fields:** Clients cannot modify `status`, `priority`, `citizenId`, `verifiedByUserId`, or `verifiedAt`.
+- **Validation:** Same rules as creation for supplied fields (description 10-1000 chars, valid wasteType enum, latitude -90 to 90, longitude -180 to 180).
 
----
-
-### 3.5 `POST /api/v1/waste-reports/{id}/verify` `[Planned]`
-Officer verification of a submitted report. **Non-trivial operation:** Sets status to `Verified`, assigns priority, logs history, and marks report eligible for AI workflow planning.
-
-- **Access:** `WasteOfficer`, `MunicipalManager` (Citizens **cannot** verify).
-- **Request Body:**
+#### Request Body (All fields optional; at least one must be provided)
 ```json
 {
-  "priority": "High",
-  "notes": "Confirmed overflowing municipal skip bin requiring flatbed truck dispatch."
+  "description": "Updated: garbage heap now extending into street lane",
+  "wasteType": "General",
+  "latitude": 6.9272,
+  "longitude": 79.8614,
+  "addressText": "Main Street, near shelter"
 }
 ```
-- **Response `200 OK`:** Updated `WasteReportDto` (`status: "Verified"`).
+
+#### Response `200 OK`
+Updated `WasteReportDetailDto`.
 
 ---
 
-### 3.6 `POST /api/v1/waste-reports/{id}/reject` `[Planned]`
-Rejects an invalid, duplicate, or out-of-boundary report.
+### 3.5 `DELETE /api/v1/waste-reports/{id}` `[Planned]`
+Cancels a waste report prior to review initiation. **Business cancellation — NOT a physical database deletion.**
 
-- **Access:** `WasteOfficer`, `MunicipalManager`.
-- **Request Body:**
+- **Access:** `Citizen` (Owner only).
+- **Precondition:** Report `Status` must be `Submitted`. If status is `UnderReview`, `Verified`, `Rejected`, or later, returns `409 Conflict`.
+- **Request Body:** No request body required. No citizen-supplied cancellation reason is required.
+- **Atomic Transaction:**
+  1. Updates `WasteReport.Status` to `Cancelled`.
+  2. Sets `WasteReport.UpdatedAt = DateTime.UtcNow`.
+  3. Inserts `WasteReportStatusHistory` (`fromStatus = "Submitted"`, `toStatus = "Cancelled"`, `changedByUserId = CitizenId`, `notes = "Cancelled by citizen"`).
+
+#### Response `200 OK`
 ```json
 {
-  "reason": "Duplicate report already covered by scheduled pickup."
+  "message": "Waste report cancelled successfully.",
+  "status": "Cancelled"
 }
 ```
-- **Response `200 OK`:** Updated `WasteReportDto` (`status: "Rejected"`).
 
 ---
 
-### 3.7 `GET /api/v1/waste-reports/{id}/history` `[Planned]`
-Returns the chronological status change history of a report.
+### 3.6 `POST /api/v1/waste-reports/{id}/start-review` `[Planned]`
+Initiates official officer review of a submitted report, locking citizen modifications. Viewing a report does **NOT** automatically initiate review.
 
-- **Access:** `Citizen` (Owner), `WasteOfficer`, `MunicipalManager`.
-- **Response `200 OK`:** Array of `WasteReportStatusHistoryDto`.
+- **Access:** `WasteOfficer` only. `MunicipalManager` is read-only in Component 1 and receives `403 Forbidden`.
+- **Precondition:** Report `Status` must be `Submitted`. Reports already `UnderReview`, `Verified`, `Rejected`, or `Cancelled` return `409 Conflict`.
+- **Request Body:** No request body required (no request DTO).
+- **Atomic Transaction:**
+  1. Updates `WasteReport.Status` to `UnderReview`.
+  2. Sets `WasteReport.UpdatedAt = DateTime.UtcNow`.
+  3. Inserts `WasteReportStatusHistory` (`fromStatus = "Submitted"`, `toStatus = "UnderReview"`, `changedByUserId = currentUserId`, `notes = "Officer started review"`).
+
+#### Response `200 OK`
+Updated `WasteReportDetailDto` (`status: "UnderReview"`).
+
+---
+
+### 3.7 `POST /api/v1/waste-reports/{id}/verify` `[Planned]`
+Waste Officer confirms validity of an inspected report. **Enables report eligibility for later AI planning.**
+
+- **Access:** `WasteOfficer` only. (`MunicipalManager` is read-only for Component 1 and receives `403 Forbidden`).
+- **Precondition:** Report `Status` must be `UnderReview`. Reports in `Submitted` (review not started) or any other status return `409 Conflict`.
+- **Request Body:** No request body required (no `VerifyWasteReportRequest` DTO). Component 1 verification does NOT require or assign `Priority`. `Priority` remains `null` (`WasteReportPriority?`). It may later be assigned only through authoritative ASP.NET business logic after operational/AI-assisted planning. AI may recommend but never persist it directly.
+- **Atomic Transaction:**
+  1. Sets `WasteReport.Status = "Verified"`.
+  2. `WasteReport.Priority` remains `null` (`WasteReportPriority?` is not assigned during verification).
+  3. Sets `WasteReport.VerifiedByUserId = currentUserId`.
+  4. Sets `WasteReport.VerifiedAt = DateTime.UtcNow`.
+  5. Sets `WasteReport.UpdatedAt = DateTime.UtcNow`.
+  6. Inserts `WasteReportStatusHistory` (`fromStatus = "UnderReview"`, `toStatus = "Verified"`, `changedByUserId = currentUserId`, `notes = null`).
+
+#### Response `200 OK`
+```json
+{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "citizenId": "1fa85f64-5717-4562-b3fc-2c963f66afa1",
+  "citizenName": "Kamal Perera",
+  "description": "Large garbage heap overflowing near bus stand",
+  "wasteType": "General",
+  "latitude": 6.9271,
+  "longitude": 79.8612,
+  "addressText": "Main Street, Pettah",
+  "status": "Verified",
+  "priority": null,
+  "verifiedByUserId": "2fa85f64-5717-4562-b3fc-2c963f66afa2",
+  "verifiedByUserName": "Officer Silva",
+  "verifiedAt": "2026-09-15T09:45:00Z",
+  "attachments": [],
+  "createdAt": "2026-09-15T08:30:00Z",
+  "updatedAt": "2026-09-15T09:45:00Z"
+}
+```
+
+---
+
+### 3.8 `POST /api/v1/waste-reports/{id}/reject` `[Planned]`
+Rejects an invalid, duplicate, or out-of-jurisdiction waste report.
+
+- **Access:** `WasteOfficer` only. (`MunicipalManager` receives `403 Forbidden`).
+- **Precondition:** Report `Status` must be `UnderReview`. Reports in `Submitted` (review not started) or any other status return `409 Conflict`.
+- **Validation Rules:**
+  - `reason`: Required, 5 to 500 characters (`RejectWasteReportRequest`).
+- **Atomic Transaction:**
+  1. Sets `WasteReport.Status = "Rejected"`.
+  2. Sets `WasteReport.UpdatedAt = DateTime.UtcNow`.
+  3. Inserts `WasteReportStatusHistory` (`fromStatus = "UnderReview"`, `toStatus = "Rejected"`, `changedByUserId = currentUserId`, `notes = request.reason`). Note: Rejection reason is stored authoritatively in history `notes`; no separate column exists on `WasteReport`.
+
+#### Request Body (`RejectWasteReportRequest`)
+```json
+{
+  "reason": "Duplicate report already covered by scheduled pickup route."
+}
+```
+
+#### Response `200 OK`
+Updated `WasteReportDetailDto` (`status: "Rejected"`).
+
+---
+
+### 3.9 `GET /api/v1/waste-reports/{id}/history` `[Planned]`
+Retrieves chronological audit trail of all state transitions for a report.
+
+- **Access:** `Citizen` (Owner only), `WasteOfficer`, `MunicipalManager`. `Driver` receives `403 Forbidden`.
+
+#### Response `200 OK`
+```json
+[
+  {
+    "id": "7fa85f64-5717-4562-b3fc-2c963f66afa9",
+    "wasteReportId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "fromStatus": null,
+    "toStatus": "Submitted",
+    "changedByUserId": "1fa85f64-5717-4562-b3fc-2c963f66afa1",
+    "changedByUserName": "Kamal Perera",
+    "notes": "Initial report submission",
+    "changedAt": "2026-09-15T08:30:00Z"
+  },
+  {
+    "id": "8fa85f64-5717-4562-b3fc-2c963f66afa0",
+    "wasteReportId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "fromStatus": "Submitted",
+    "toStatus": "UnderReview",
+    "changedByUserId": "2fa85f64-5717-4562-b3fc-2c963f66afa2",
+    "changedByUserName": "Officer Silva",
+    "notes": "Officer started review",
+    "changedAt": "2026-09-15T09:15:00Z"
+  },
+  {
+    "id": "9fa85f64-5717-4562-b3fc-2c963f66afa3",
+    "wasteReportId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "fromStatus": "UnderReview",
+    "toStatus": "Verified",
+    "changedByUserId": "2fa85f64-5717-4562-b3fc-2c963f66afa2",
+    "changedByUserName": "Officer Silva",
+    "notes": null,
+    "changedAt": "2026-09-15T09:45:00Z"
+  }
+]
+```
+
+---
+
+### 3.10 `POST /api/v1/waste-reports/{id}/attachments` `[Planned]`
+Uploads a photographic evidence image for a waste report using `multipart/form-data`.
+
+- **Access:** `Citizen` (Owner only).
+- **Precondition:** Report `Status` must be `Submitted`. If `UnderReview` or later, returns `409 Conflict`.
+- **Content-Type:** `multipart/form-data` (form field: `file`).
+- **Validation Rules & Constraints:**
+  - `file`: Required, non-empty binary.
+  - Allowed MIME types: `image/jpeg`, `image/png`, `image/webp`.
+  - File size: Maximum 5 MB (5,242,880 bytes).
+  - Maximum count: 3 attachments per report. If report already has 3 attachments, returns `400 BadRequest`.
+- **Cloud Storage Architecture & Persistence:**
+  - File binary is uploaded to provider-independent cloud object storage via the `IFileStorageService` abstraction.
+  - PostgreSQL persists only the `StorageKey` (e.g. `waste-reports/{reportId}/{uniqueId}.ext`) and `FileType`. No binary blobs or permanent public URLs are stored in the database.
+  - The returned `fileUrl` is strictly an API/presentation concern (e.g. short-lived signed URL or authorized backend stream generated by `IFileStorageService`). Knowing a `StorageKey` does not grant access. Zero cloud credentials or secrets are exposed to client applications.
+
+#### Response `201 Created` (`ReportAttachmentDto`)
+```json
+{
+  "id": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
+  "wasteReportId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "fileUrl": "https://storage.smartwaste.local/reports/3fa85f64-5717-4562-b3fc-2c963f66afa6/4fa85f64.jpg?token=...",
+  "fileType": "image/jpeg",
+  "createdAt": "2026-09-15T08:31:00Z"
+}
+```
+
+---
+
+### 3.11 `DELETE /api/v1/waste-reports/{id}/attachments/{attachmentId}` `[Planned]`
+Removes an uploaded photographic attachment.
+
+- **Access:** `Citizen` (Owner only).
+- **Precondition:** Report `Status` must be `Submitted`. If `UnderReview` or later, returns `409 Conflict`.
+- **Side effects:** Deletes database `ReportAttachment` record and calls `IFileStorageService.DeleteAsync(storageKey)` to remove the object from managed cloud storage.
+
+#### Response `200 OK`
+```json
+{
+  "message": "Attachment removed successfully."
+}
+```
 
 ---
 
@@ -790,7 +1061,7 @@ Returns the full, transparent audit trace of agent actions and tool calls. Hidde
     {
       "stepNumber": 2,
       "agentName": "FleetRouteAgent",
-      "action": "Calculate TSP waypoint ordering",
+      "action": "Execute route planning/optimization for waypoints",
       "status": "Completed",
       "resultSummary": "Generated 8-waypoint path with 12.4km total distance"
     }
@@ -834,3 +1105,55 @@ Returns the full, transparent audit trace of agent actions and tool calls. Hidde
   "createdTaskId": "d3b07384-d113-4f44-8cc0-f3a763886561"
 }
 ```
+
+---
+
+## 8. Internal Service & AI Tool Endpoints
+
+Internal endpoints are exposed strictly for private service-to-service communication (such as the Python AI microservice). Public web and mobile clients cannot access these endpoints.
+
+### 8.1 `GET /api/v1/internal/ai-tools/waste-reports/verified` `[Implemented]`
+Retrieves a strictly read-only, paginated, safe projection of WasteReports whose authoritative status is `Verified`.
+
+- **Access:** Internal Service only (`X-Internal-Service-Key` header validated against configured server secret). Callers cannot authenticate with user JWT Bearer tokens.
+- **Protocol:** HTTP GET, strictly read-only (zero database side effects, no status mutations, no priority assignments, no audit log creations).
+- **Status Filter:** Server-enforced `Status == Verified`. Callers cannot request unverified, submitted, under-review, or rejected reports.
+- **Data Minimization Contract:**
+  - Citizen personal identifiable information (`citizenId`, `fullName`, `email`, `phoneNumber`) is excluded.
+  - Internal WasteOfficer identifiers are excluded.
+  - Private Supabase Storage keys and signed image URLs are excluded.
+  - Internal status transition notes and history records are excluded.
+  - Exposes only operational metadata required for planning: `id`, `description`, `wasteType`, `latitude`, `longitude`, `addressText`, `status`, `createdAt`, `verifiedAt`, and `attachmentCount`.
+- **Query Parameters:**
+  - `page` (integer, default: `1`, minimum: `1`)
+  - `pageSize` (integer, default: `20`, range: `1` to `50`)
+- **Sorting:** Deterministic descending order by `CreatedAt DESC`, `Id DESC`.
+- **Request Headers:**
+  - `X-Internal-Service-Key`: `<secret_key>`
+- **Response `200 OK`:**
+```json
+{
+  "items": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "description": "Accumulation of organic waste near market entrance",
+      "wasteType": "Organic",
+      "latitude": 6.9271,
+      "longitude": 79.8612,
+      "addressText": "Main Street, Colombo",
+      "status": "Verified",
+      "createdAt": "2026-09-17T10:00:00Z",
+      "verifiedAt": "2026-09-17T10:30:00Z",
+      "attachmentCount": 2
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 1,
+  "totalPages": 1
+}
+```
+- **Error Responses:**
+  - `401 Unauthorized`: Missing or invalid `X-Internal-Service-Key` header (`ProblemDetails`).
+  - `400 BadRequest`: Query parameter validation failure (`page < 1` or `pageSize < 1` or `pageSize > 50`).
+

@@ -78,6 +78,7 @@ export const OfficerDashboardPage: React.FC = () => {
             description="Pending field verification"
             icon={<ReportsIcon />}
             variant="amber"
+            to="/officer/waste-reports"
           />
           <OverviewCard
             label="Active Bins"

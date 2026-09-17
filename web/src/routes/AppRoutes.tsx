@@ -1,5 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthLayout } from '../layouts/AuthLayout';
 import { AppLayout } from '../layouts/AppLayout';
 import { LoginPage } from '../features/auth/pages/LoginPage';
@@ -19,6 +20,8 @@ import { UserManagementPage } from '../features/manager/pages/UserManagementPage
 import { ChangePasswordPage } from '../features/auth/pages/ChangePasswordPage';
 import { managerNavItems } from '../components/layout/navConfig';
 import { ComingSoonPage } from '../pages/ComingSoonPage';
+import { WasteReportsPage } from '../features/reporting/pages/WasteReportsPage';
+import { WasteReportDetailPage } from '../features/reporting/pages/WasteReportDetailPage';
 
 /**
  * Renders auth pages or redirects already-authenticated users to their role default dashboard.
@@ -69,9 +72,19 @@ const RootRoute: React.FC = () => {
   return <HomePage />;
 };
 
+const defaultQueryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
 export const AppRoutes: React.FC = () => {
   return (
-    <Routes>
+    <QueryClientProvider client={defaultQueryClient}>
+      <Routes>
       {/* Public / Auth routes */}
       <Route element={<AuthLayout />}>
         <Route
@@ -90,16 +103,10 @@ export const AppRoutes: React.FC = () => {
         <Route element={<RoleRoute allowedRoles={['WasteOfficer']} />}>
           <Route element={<DashboardLayout />}>
             <Route path="/officer/dashboard" element={<OfficerDashboardPage />} />
-            <Route
-              path="/officer/waste-reports"
-              element={
-                <ComingSoonPage
-                  title="Waste Reports"
-                  description="Review, verify and manage citizen waste reports. This module is currently under development."
-                  backTo="/officer/dashboard"
-                />
-              }
-            />
+            <Route path="/officer/waste-reports" element={<WasteReportsPage />} />
+            <Route path="/officer/waste-reports/:id" element={<WasteReportDetailPage />} />
+            <Route path="/officer/reports" element={<Navigate to="/officer/waste-reports" replace />} />
+            <Route path="/officer/reports/:id" element={<WasteReportDetailPage />} />
             <Route
               path="/officer/bins"
               element={
@@ -149,6 +156,10 @@ export const AppRoutes: React.FC = () => {
         <Route element={<RoleRoute allowedRoles={['MunicipalManager']} />}>
           <Route element={<DashboardLayout navItems={managerNavItems} title="Municipal Manager Dashboard" />}>
             <Route path="/manager/dashboard" element={<ManagerDashboardPage />} />
+            <Route path="/manager/reports" element={<WasteReportsPage />} />
+            <Route path="/manager/reports/:id" element={<WasteReportDetailPage />} />
+            <Route path="/manager/waste-reports" element={<Navigate to="/manager/reports" replace />} />
+            <Route path="/manager/waste-reports/:id" element={<WasteReportDetailPage />} />
             <Route path="/manager/users" element={<UserManagementPage />} />
             <Route
               path="/manager/ai-approvals"
@@ -238,5 +249,6 @@ export const AppRoutes: React.FC = () => {
       <Route path="/unauthorized" element={<UnauthorizedPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </QueryClientProvider>
   );
 };

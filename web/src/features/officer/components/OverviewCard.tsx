@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 export type OverviewVariant = 'amber' | 'emerald' | 'blue' | 'mint' | 'rose' | 'slate';
 
@@ -10,6 +11,7 @@ export interface OverviewCardProps {
   iconColorStyle?: string;
   iconBgColor?: string;
   variant?: OverviewVariant;
+  to?: string;
 }
 
 const variantStyles: Record<
@@ -56,6 +58,7 @@ export const OverviewCard: React.FC<OverviewCardProps> = ({
   iconColorStyle,
   iconBgColor,
   variant = 'emerald',
+  to,
 }) => {
   const currentVariant = variantStyles[variant] || variantStyles.emerald;
   const resolvedCardStyle = currentVariant.card;
@@ -64,10 +67,8 @@ export const OverviewCard: React.FC<OverviewCardProps> = ({
     iconBgColor ||
     `${currentVariant.iconContainer} ${currentVariant.iconText}`;
 
-  return (
-    <div
-      className={`rounded-xl border shadow-2xs p-4 flex items-start gap-3.5 transition-all ${resolvedCardStyle}`}
-    >
+  const content = (
+    <>
       <div
         className={`w-11 h-11 rounded-full border flex items-center justify-center shrink-0 mt-0.5 shadow-2xs ${resolvedIconContainerStyle}`}
         aria-hidden="true"
@@ -87,6 +88,25 @@ export const OverviewCard: React.FC<OverviewCardProps> = ({
           </p>
         )}
       </div>
+    </>
+  );
+
+  if (to) {
+    return (
+      <Link
+        to={to}
+        className={`rounded-xl border shadow-2xs p-4 flex items-start gap-3.5 transition-all block text-left ${resolvedCardStyle}`}
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div
+      className={`rounded-xl border shadow-2xs p-4 flex items-start gap-3.5 transition-all ${resolvedCardStyle}`}
+    >
+      {content}
     </div>
   );
 };

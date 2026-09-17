@@ -168,6 +168,11 @@ describe('MunicipalManager Dashboard', () => {
 
     // Verify links in sidebar
     expect(screen.getAllByRole('link', { name: /dashboard/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole('link', { name: /waste reports/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('link', { name: /waste reports/i })).toHaveAttribute(
+      'href',
+      '/manager/reports'
+    );
     expect(screen.getAllByRole('link', { name: /ai approvals/i }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByRole('link', { name: /fleet & routes/i }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByRole('link', { name: /operations/i }).length).toBeGreaterThanOrEqual(1);
@@ -471,5 +476,28 @@ describe('MunicipalManager Dashboard', () => {
       expect(backLink).toHaveAttribute('href', '/manager/dashboard');
       unmount();
     });
+  });
+
+  it('wires Open Operational Incidents OverviewCard to /manager/reports', () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      isLoading: false,
+      accessToken: 'token-manager',
+      user: {
+        id: 'manager-1',
+        fullName: 'Kavindi Silva',
+        email: 'manager@smartwaste.local',
+        role: 'MunicipalManager',
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/manager/dashboard']}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    const incidentsCard = screen.getByRole('link', { name: /open operational incidents/i });
+    expect(incidentsCard).toHaveAttribute('href', '/manager/reports');
   });
 });
