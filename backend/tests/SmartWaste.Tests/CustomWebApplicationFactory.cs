@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using SmartWaste.Application.Reporting.Interfaces;
+using SmartWaste.Tests.Reporting.Fakes;
 using Xunit;
 
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
@@ -15,6 +19,8 @@ public class IntegrationTestCollection : ICollectionFixture<CustomWebApplication
 
 public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
+    public FakeFileStorageService FakeStorage { get; } = new();
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Development");
@@ -33,8 +39,19 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Jwt:Key"] = builtConfig["Jwt:Key"] ?? "ThisIsASecretKeyForSmartWasteDevelopmentOnly12345!",
                 ["Jwt:Issuer"] = "SmartWaste.Api",
                 ["Jwt:Audience"] = "SmartWaste.Clients",
-                ["Jwt:ExpiryMinutes"] = "60"
+                ["Jwt:ExpiryMinutes"] = "60",
+                ["Storage:Supabase:BaseUrl"] = "https://mock.supabase.co",
+                ["Storage:Supabase:SecretKey"] = "sb_secret_mock_test_key_12345",
+                ["Storage:Supabase:Bucket"] = "waste-report-attachments",
+                ["Storage:Supabase:SignedUrlExpirySeconds"] = "900",
+                ["InternalService:ApiKey"] = "TestInternalServiceKey_12345!"
             });
+        });
+
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<IFileStorageService>();
+            services.AddSingleton<IFileStorageService>(FakeStorage);
         });
     }
 }

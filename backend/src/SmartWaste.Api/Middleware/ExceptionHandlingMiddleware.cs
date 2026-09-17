@@ -110,6 +110,34 @@ public class ExceptionHandlingMiddleware
                 Detail = userMgmtEx.Message,
                 Instance = context.Request.Path
             },
+            ForbiddenException forbEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.Forbidden,
+                Title = "Forbidden",
+                Detail = forbEx.Message,
+                Instance = context.Request.Path
+            },
+            BusinessRuleConflictException confEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.Conflict,
+                Title = "Business Rule Conflict",
+                Detail = confEx.Message,
+                Instance = context.Request.Path
+            },
+            FileValidationException fileValEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.BadRequest,
+                Title = "Invalid File",
+                Detail = fileValEx.Message,
+                Instance = context.Request.Path
+            },
+            StorageServiceException storEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.InternalServerError,
+                Title = "Storage Service Error",
+                Detail = storEx.Message,
+                Instance = context.Request.Path
+            },
             _ => new ProblemDetails
             {
                 Status = (int)HttpStatusCode.InternalServerError,

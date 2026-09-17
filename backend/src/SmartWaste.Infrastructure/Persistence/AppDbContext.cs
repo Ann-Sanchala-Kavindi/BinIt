@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SmartWaste.Domain.Entities;
+using SmartWaste.Domain.Reporting.Entities;
 
 namespace SmartWaste.Infrastructure.Persistence;
 
@@ -16,9 +17,15 @@ public class AppDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
     {
     }
 
+    public DbSet<WasteReport> WasteReports => Set<WasteReport>();
+    public DbSet<ReportAttachment> ReportAttachments => Set<ReportAttachment>();
+    public DbSet<WasteReportStatusHistory> WasteReportStatusHistories => Set<WasteReportStatusHistory>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        builder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
         // AppUser configuration
         builder.Entity<AppUser>(entity =>
