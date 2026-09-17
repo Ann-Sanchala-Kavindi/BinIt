@@ -11,6 +11,13 @@ import '../../features/citizen/presentation/citizen_dashboard_screen.dart';
 import '../../features/citizen/presentation/citizen_placeholder_screen.dart';
 import '../../features/driver/presentation/driver_dashboard_screen.dart';
 import '../../features/driver/presentation/driver_placeholder_screen.dart';
+import '../../features/reporting/data/reporting_repository.dart';
+import '../../features/reporting/models/waste_report_detail_model.dart';
+import '../../features/reporting/presentation/edit_report_screen.dart';
+import '../../features/reporting/presentation/manage_report_photos_screen.dart';
+import '../../features/reporting/presentation/my_reports_screen.dart';
+import '../../features/reporting/presentation/report_detail_screen.dart';
+import '../../features/reporting/presentation/report_waste_screen.dart';
 import '../../shared/widgets/authenticated_mobile_shell.dart';
 
 /// Helper to trigger GoRouter redirects when Riverpod AuthState updates.
@@ -104,10 +111,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/citizen/reports',
-            builder: (context, state) => const CitizenPlaceholderScreen(
-              title: 'My Reports',
-              description: 'Your waste report history and tracking will be available here.',
-              icon: Icons.assignment_outlined,
+            builder: (context, state) => MyReportsScreen(
+              repository: ref.watch(reportingRepositoryProvider),
             ),
           ),
           GoRoute(
@@ -131,12 +136,37 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       // Standalone Citizen Sub-flow Routes (Dedicated screen with Back action)
       GoRoute(
+        path: '/citizen/my-reports',
+        builder: (context, state) => MyReportsScreen(
+          repository: ref.watch(reportingRepositoryProvider),
+          showAppBar: true,
+        ),
+      ),
+      GoRoute(
         path: '/citizen/report-waste',
-        builder: (context, state) => const CitizenPlaceholderScreen(
-          title: 'Report Waste',
-          description: 'Waste reporting using a location, description and photo will be available here.',
-          icon: Icons.add_photo_alternate_outlined,
-          hasScaffold: true,
+        builder: (context, state) => const ReportWasteScreen(),
+      ),
+      GoRoute(
+        path: '/citizen/reports/:id',
+        builder: (context, state) => ReportDetailScreen(
+          reportId: state.pathParameters['id']!,
+          repository: ref.watch(reportingRepositoryProvider),
+        ),
+      ),
+      GoRoute(
+        path: '/citizen/reports/:id/edit',
+        builder: (context, state) => EditReportScreen(
+          reportId: state.pathParameters['id']!,
+          initialReport: state.extra as WasteReportDetailModel?,
+          repository: ref.watch(reportingRepositoryProvider),
+        ),
+      ),
+      GoRoute(
+        path: '/citizen/reports/:id/photos',
+        builder: (context, state) => ManageReportPhotosScreen(
+          reportId: state.pathParameters['id']!,
+          initialReport: state.extra as WasteReportDetailModel?,
+          repository: ref.watch(reportingRepositoryProvider),
         ),
       ),
       GoRoute(
