@@ -40,6 +40,14 @@ class ApiConstants {
   static const String me = '/auth/me';
   static const String changePassword = '/auth/change-password';
 
+  // Waste Reporting endpoints
+  static const String wasteReports = '/waste-reports';
+  static String wasteReportDetail(String id) => '/waste-reports/$id';
+  static String wasteReportHistory(String reportId) => '/waste-reports/$reportId/history';
+  static String wasteReportAttachments(String reportId) => '/waste-reports/$reportId/attachments';
+  static String wasteReportAttachment(String reportId, String attachmentId) =>
+      '/waste-reports/$reportId/attachments/$attachmentId';
+
   // Network timeouts
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);

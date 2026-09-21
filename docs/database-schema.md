@@ -52,7 +52,7 @@ Roles are managed via ASP.NET Core Identity roles (`IdentityRole<Guid>`):
 ---
 
 ### 2.2 `CitizenProfile`
-One-to-one extension for users holding the `Citizen` role.
+One-to-one extension for users holding the `Citizen` role. *(Deferred — not required for Component 1 core waste reporting; `WasteReport.CitizenId` references `AppUser.Id` directly).*
 
 | Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
@@ -91,16 +91,16 @@ Represents an illegal dumping or overflow report submitted by a citizen.
 | Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
 | `Id` | `Guid` | No | Primary Key (`uuid`). |
-| `CitizenId` | `Guid` | No | FK to `AppUser.Id` (Reporter). |
-| `Description` | `string` | No | Detailed description of the waste site (`text`). |
+| `CitizenId` | `Guid` | No | FK to `AppUser.Id` (Reporter). Server-derived from authenticated JWT; no dependency on deferred `CitizenProfile`. Citizen must never supply arbitrary `CitizenId`. |
+| `Description` | `string` | No | Detailed description of the waste site (`text`, 10–1000 characters). |
 | `WasteType` | `string` | No | Categorization of reported waste (`varchar(50)`). |
-| `Latitude` | `double` | No | Geospatial latitude of the report location. |
-| `Longitude` | `double` | No | Geospatial longitude of the report location. |
-| `AddressText` | `string` | Yes | Human-readable address or landmark description (`varchar(255)`). |
+| `Latitude` | `double` | No | Geospatial latitude of the report location (-90.0 to 90.0). |
+| `Longitude` | `double` | No | Geospatial longitude of the report location (-180.0 to 180.0). |
+| `AddressText` | `string` | Yes | Human-readable address or landmark description (`varchar(500)`). |
 | `Status` | `string` | No | Current lifecycle status (`varchar(50)`). Default: `Submitted`. |
-| `Priority` | `string` | Yes | Priority assigned during verification (`Low`, `Medium`, `High`, `Urgent`). |
-| `VerifiedByUserId` | `Guid` | Yes | FK to `AppUser.Id` (WasteOfficer who verified or rejected). |
-| `VerifiedAt` | `DateTime` | Yes | UTC timestamp when verified/rejected. |
+| `Priority` | `WasteReportPriority?` | Yes | Operational priority enum (`varchar(30)`: `Low`, `Medium`, `High`, `Urgent`). Nullable (`WasteReportPriority?`). Priority remains null during Component 1 verification. It may later be assigned only through authoritative ASP.NET business logic after operational/AI-assisted planning. AI may recommend but never persist it directly. |
+| `VerifiedByUserId` | `Guid` | Yes | FK to `AppUser.Id` (WasteOfficer who verified the report). Set exclusively by backend during verification; null for other statuses. |
+| `VerifiedAt` | `DateTime` | Yes | UTC timestamp when verified by WasteOfficer. Set exclusively by backend during verification. |
 | `CreatedAt` | `DateTime` | No | UTC timestamp of submission. |
 | `UpdatedAt` | `DateTime` | Yes | UTC timestamp of last update. |
 
@@ -112,22 +112,50 @@ Represents an illegal dumping or overflow report submitted by a citizen.
 - `Bulky`: Furniture, appliances, construction debris.
 - `Other`: Uncategorized waste requiring field inspection.
 
-#### Waste Report Status Lifecycle
+#### Waste Report Priority Enum (`WasteReportPriority`)
+`WasteReport.Priority` is formalized as a nullable domain enum `WasteReportPriority?`:
+- `Low`
+- `Medium`
+- `High`
+- `Urgent`
+
+Persisted in PostgreSQL as `varchar(30)`. `WasteReport.Priority` remains `null` during Component 1 verification. It may later be assigned only through authoritative ASP.NET Core business logic after operational/AI-assisted planning. The AI service may recommend a priority, but has zero direct database connection and never persists it directly.
+
+#### Waste Report Status Lifecycle & Transitions
 ```
 Submitted ──> UnderReview ──> Verified ──> Scheduled ──> InProgress ──> Resolved
      │             │
-     └──> Rejected ┘
+     │             └──> Rejected
      │
-     └──> Cancelled (by Citizen before verification)
+     └──> Cancelled (by Citizen while Submitted)
 ```
-- `Submitted`: Initial state created by Citizen.
-- `UnderReview`: Waste Officer has opened and is evaluating the report.
-- `Verified`: Waste Officer confirmed report validity and priority. **AI workflows may ONLY initiate from reports in this status.**
-- `Rejected`: Waste Officer deemed report invalid, duplicate, or out of municipal jurisdiction.
-- `Scheduled`: Linked to a planned `CollectionTask`.
-- `InProgress`: Collection crew is en route or collecting on site.
-- `Resolved`: Waste has been completely collected and site cleared.
-- `Cancelled`: Citizen withdrew report prior to verification.
+
+##### Allowed Status Transitions
+| From Status | To Status | Trigger / Action | Authorized Role | Preconditions & Business Rules |
+| :--- | :--- | :--- | :--- | :--- |
+| *(None)* | `Submitted` | `POST /api/v1/waste-reports` | `Citizen` | Valid payload; `CitizenId` set from JWT; initial status history created atomically. |
+| `Submitted` | `UnderReview` | `POST /api/v1/waste-reports/{id}/start-review` | `WasteOfficer` | Report in `Submitted`; locks citizen editing/cancellation; history logged. Viewing does not start review. |
+| `Submitted` | `Cancelled` | `DELETE /api/v1/waste-reports/{id}` | `Citizen` (Owner) | Report in `Submitted`; business cancellation (no hard delete); no citizen-supplied cancellation reason required (`Notes` is null or backend default "Cancelled by citizen"). |
+| `UnderReview` | `Verified` | `POST /api/v1/waste-reports/{id}/verify` | `WasteOfficer` | Report in `UnderReview`; sets `Status = Verified`, `VerifiedByUserId`, `VerifiedAt`, `UpdatedAt`; history logged. Verification does NOT assign Priority (`WasteReportPriority?` remains null). Report becomes eligible for later AI planning. |
+| `UnderReview` | `Rejected` | `POST /api/v1/waste-reports/{id}/reject` | `WasteOfficer` | Report in `UnderReview`; required `reason` (5–500 chars) stored in `WasteReportStatusHistory.Notes`. |
+| `Verified` | `Scheduled` | Approved collection plan / authoritative `CollectionTask` creation | *Component 2 Operational Workflow (ASP.NET Core)* | Linked to planned `CollectionTask`. AI may recommend scheduling in later phases, but AI has zero direct write access to PostgreSQL; authoritative transition and task creation are executed solely via ASP.NET Core. |
+| `Scheduled` | `InProgress` | Authoritative start of collection work associated with the report/task | *Component 3 Operational Workflow (ASP.NET Core)* | Triggered by the authoritative start of collection work associated with the report/task. Route, RouteStop, and WasteReport state transitions are kept conceptually separate. |
+| `InProgress` | `Resolved` | Collection Completion | *Component 3 / Driver* | Waste collected and site cleared. |
+
+> [!IMPORTANT]
+> **No Hard Deletes:** `WasteReport` records are never physically removed from PostgreSQL. Citizen cancellation via `DELETE /api/v1/waste-reports/{id}` executes a business state transition to `Cancelled`, preserving full auditability, status history, and foreign key integrity.
+>
+> **Status Lifecycle Ownership:**
+> - **Component 1:** Owns `Submitted`, `UnderReview`, `Verified`, `Rejected`, and `Cancelled`.
+> - **Future Component 2:** Owns `Verified` → `Scheduled` (executed authoritatively via ASP.NET Core upon approved collection plan / `CollectionTask` creation).
+> - **Future Component 3:** Owns `Scheduled` → `InProgress` (Trigger: Authoritative start of collection work associated with the report/task. Owner: Component 3 operational workflow through ASP.NET Core. Route, RouteStop, and WasteReport state transitions are kept conceptually separate) and `InProgress` → `Resolved` (collection completion and site clearance).
+>
+> **AI Eligibility Boundary & Roadmap:**
+> - Only reports in `Verified` status are eligible inputs for automated AI collection planning. Reports in `Submitted`, `UnderReview`, `Rejected`, `Cancelled`, `Scheduled`, `InProgress`, or `Resolved` are strictly ineligible.
+> - **AI Roadmap:** After deterministic Component 1 is implemented and verified, Step 9A.13 will expose an AI-safe Component 1 capability (`get_verified_waste_reports`), and Step 9A.14 will establish the Waste Analysis Agent foundation. Full Planner / LangGraph multi-agent orchestration remains deferred until subsequent components and tools exist.
+> - **No Direct AI Writes:** The Python AI microservice has zero direct database connection and zero write access to PostgreSQL. AI is purely advisory; all state transitions and entity creations are executed authoritatively by ASP.NET Core.
+>
+> **No Generic Status PATCH:** Status transitions cannot be executed via generic PATCH or direct field updates. Every state transition is executed through its specific, authorized business operation endpoint and recorded in `WasteReportStatusHistory`.
 
 ---
 
@@ -138,14 +166,24 @@ Photographic evidence attached to a waste report.
 | :--- | :--- | :--- | :--- |
 | `Id` | `Guid` | No | Primary Key (`uuid`). |
 | `WasteReportId` | `Guid` | No | FK to `WasteReport.Id` (Cascade delete). |
-| `FileUrl` | `string` | No | Relative storage path or public CDN URL (`varchar(500)`). |
-| `FileType` | `string` | No | MIME type (`image/jpeg`, `image/png`, etc.) (`varchar(100)`). |
+| `StorageKey` | `string` | No | Provider-independent object storage key/identifier (e.g., `waste-reports/{reportId}/{uniqueId}.ext`) (`varchar(500)`). Persisted key returned by configured cloud storage; domain does not store public URLs or image binaries in PostgreSQL. |
+| `FileType` | `string` | No | MIME type (`image/jpeg`, `image/png`, `image/webp`) (`varchar(100)`). |
 | `CreatedAt` | `DateTime` | No | UTC timestamp of upload. |
+
+#### Cloud Storage Architecture & Attachment Constraints
+- **Cloud/Object Storage Strategy:** Photographic attachments are persisted in a free cloud object storage service (exact provider to be selected in Step 9A.7; kept provider-independent so domain entities remain decoupled from AWS S3, Supabase, Cloudinary, Firebase, or Azure Blob).
+- **Storage Abstraction:** Implementation will utilize an `IFileStorageService` abstraction (`UploadAsync`, `DeleteAsync`, `GetReadUrlAsync`).
+- **Secure Image Access:** `fileUrl` is strictly an API response/display concern (e.g., short-lived signed read URL or authorized backend URL generated by `IFileStorageService`). Clients never depend on raw `StorageKey` or hold secret cloud credentials. Knowing a `StorageKey` does not grant access; viewing attachments is authorization-controlled.
+- **Relationship:** 1 `WasteReport` → 0..3 `ReportAttachment` records (maximum 3 images per report).
+- **Format Restrictions:** JPEG (`image/jpeg`), PNG (`image/png`), WebP (`image/webp`).
+- **File Size Limit:** Maximum 5 MB per file.
+- **Lifecycle Guard:** Attachments can only be uploaded (`POST /api/v1/waste-reports/{id}/attachments`) or removed (`DELETE /api/v1/waste-reports/{id}/attachments/{attachmentId}`) by the owner Citizen while the report is in `Submitted` status. Once `UnderReview` or later, attachments are permanently locked from modification.
+- **Visibility:** Read-only for `WasteOfficer` and `MunicipalManager`.
 
 ---
 
 ### 3.3 `WasteReportStatusHistory`
-Audit record tracking every state change for accountability and timeline visualization.
+Audit record tracking every state change for accountability, timeline visualization, and SLA tracking.
 
 | Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
@@ -153,9 +191,16 @@ Audit record tracking every state change for accountability and timeline visuali
 | `WasteReportId` | `Guid` | No | FK to `WasteReport.Id` (Cascade delete). |
 | `FromStatus` | `string` | Yes | Previous status (`null` for initial `Submitted` creation). |
 | `ToStatus` | `string` | No | New status (`varchar(50)`). |
-| `ChangedByUserId`| `Guid` | Yes | FK to `AppUser.Id` who performed the transition (`null` for system events). |
-| `Notes` | `string` | Yes | Reason for change or officer notes (`text`). |
+| `ChangedByUserId`| `Guid` | Yes | FK to `AppUser.Id` who performed the transition (`null` for automated system events). |
+| `Notes` | `string` | Yes | Rejection reason (required on reject, 5–500 chars), officer remarks (optional on start-review), or cancellation notes (optional/backend default, e.g. "Cancelled by citizen") (`text`). |
 | `ChangedAt` | `DateTime` | No | UTC timestamp of change. |
+
+#### Audit Behavior & Transaction Rules
+- **Initial Submission:** Creation of a `WasteReport` atomically inserts an initial history record (`FromStatus = null`, `ToStatus = Submitted`, `ChangedByUserId = CitizenId`, `ChangedAt = CreatedAt`).
+- **Atomic State Transitions:** All subsequent status transitions (`UnderReview`, `Verified`, `Rejected`, `Cancelled`, `Scheduled`, `InProgress`, `Resolved`) must insert a history record atomically in the same database transaction as the report update.
+- **Rejection vs Cancellation Notes:**
+  - When a report is rejected by a `WasteOfficer`, the mandatory rejection reason (5–500 characters) is persisted in `WasteReportStatusHistory.Notes`. No separate `RejectionReason` column exists on `WasteReport`.
+  - When a report is cancelled by a `Citizen`, no cancellation reason is required; `Notes` is persisted as `null` or a backend default `"Cancelled by citizen"`.
 
 ---
 

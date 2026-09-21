@@ -521,7 +521,7 @@ describe('WasteOfficer Dashboard', () => {
     });
 
     render(
-      <MemoryRouter initialEntries={['/officer/waste-reports']}>
+      <MemoryRouter initialEntries={['/officer/bins']}>
         <AppRoutes />
       </MemoryRouter>
     );
@@ -534,5 +534,30 @@ describe('WasteOfficer Dashboard', () => {
     expect(await screen.findByText(/welcome back,/i)).toBeInTheDocument();
     const headings = await screen.findAllByRole('heading', { name: /waste officer dashboard/i });
     expect(headings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('ensures /officer/waste-reports opens the real Waste Reports operational page', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      isLoading: false,
+      accessToken: 'token-officer',
+      user: {
+        id: 'officer-1',
+        fullName: 'Nimal Perera',
+        email: 'officer@smartwaste.local',
+        role: 'WasteOfficer',
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/officer/waste-reports']}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('heading', { name: /waste reports/i })).toBeInTheDocument();
+    expect(
+      screen.getByText(/review and manage reported waste issues across municipal zones/i)
+    ).toBeInTheDocument();
   });
 });

@@ -4,8 +4,10 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartWaste.Application.Common.Options;
 using SmartWaste.Application.Interfaces;
+using SmartWaste.Application.Reporting.Interfaces;
 using SmartWaste.Domain.Entities;
 using SmartWaste.Infrastructure.Persistence;
+using SmartWaste.Infrastructure.Reporting.Services;
 using SmartWaste.Infrastructure.Services;
 
 namespace SmartWaste.Infrastructure;
@@ -54,6 +56,24 @@ public static class DependencyInjection
         // Register application services
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IUserService, UserService>();
+
+        // Component 1 — Waste Reporting & Citizen Management
+        services.AddScoped<IWasteReportService, WasteReportService>();
+        services.AddScoped<IWasteReportAttachmentService, WasteReportAttachmentService>();
+
+        // Cloud Storage — Supabase Storage
+        var storageSection = configuration.GetSection(SmartWaste.Infrastructure.Reporting.Storage.SupabaseStorageOptions.SectionName);
+        services.Configure<SmartWaste.Infrastructure.Reporting.Storage.SupabaseStorageOptions>(storageSection);
+
+        services.AddHttpClient<IFileStorageService, SmartWaste.Infrastructure.Reporting.Storage.SupabaseFileStorageService>((sp, client) =>
+        {
+            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<SmartWaste.Infrastructure.Reporting.Storage.SupabaseStorageOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(options.BaseUrl) && Uri.TryCreate(options.BaseUrl, UriKind.Absolute, out _))
+            {
+                client.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/");
+            }
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
 
         // Internal FastAPI AI Service typed client registration
         var aiSection = configuration.GetSection(AiServiceOptions.SectionName);

@@ -11,6 +11,16 @@ import 'package:mobile/features/auth/presentation/register_screen.dart';
 import 'package:mobile/features/auth/providers/auth_provider.dart';
 import 'package:mobile/features/citizen/presentation/citizen_dashboard_screen.dart';
 import 'package:mobile/features/driver/presentation/driver_dashboard_screen.dart';
+import 'package:mobile/features/reporting/data/reporting_repository.dart';
+import 'package:mobile/features/reporting/models/paged_waste_reports_model.dart';
+import 'package:mobile/features/reporting/models/waste_report_detail_model.dart';
+import 'package:mobile/features/reporting/models/waste_report_status.dart';
+import 'package:mobile/features/reporting/models/waste_report_status_history_model.dart';
+import 'package:mobile/features/reporting/models/waste_type.dart';
+import 'package:mobile/features/reporting/presentation/edit_report_screen.dart';
+import 'package:mobile/features/reporting/presentation/manage_report_photos_screen.dart';
+import 'package:mobile/features/reporting/presentation/my_reports_screen.dart';
+import 'package:mobile/features/reporting/presentation/report_detail_screen.dart';
 
 // Fake Notifier to directly test routing guards without background network calls
 class TestAuthNotifier extends AuthNotifier {
@@ -20,6 +30,47 @@ class TestAuthNotifier extends AuthNotifier {
 
   @override
   AuthState build() => initialState;
+}
+
+class TestReportingRepository extends ReportingRepository {
+  @override
+  Future<PagedWasteReportsModel> getWasteReports({
+    int page = 1,
+    int pageSize = 20,
+    WasteReportStatus? status,
+    WasteType? wasteType,
+    String? search,
+    String? sortBy = 'createdAt',
+    String? sortDirection = 'desc',
+  }) async {
+    return const PagedWasteReportsModel(
+      items: [],
+      page: 1,
+      pageSize: 20,
+      totalCount: 0,
+      totalPages: 0,
+    );
+  }
+
+  @override
+  Future<WasteReportDetailModel> getWasteReport(String reportId) async {
+    return WasteReportDetailModel(
+      id: reportId,
+      citizenId: 'test-citizen-id',
+      citizenName: 'Authenticated Citizen',
+      description: 'Test report',
+      wasteType: WasteType.general,
+      latitude: 6.9,
+      longitude: 79.8,
+      status: WasteReportStatus.submitted,
+      createdAt: DateTime.utc(2026, 9, 16),
+    );
+  }
+
+  @override
+  Future<List<WasteReportStatusHistoryModel>> getWasteReportHistory(String reportId) async {
+    return [];
+  }
 }
 
 void main() {
@@ -67,6 +118,7 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith(() => TestAuthNotifier(const AuthState.authenticated(testCitizenUser))),
+            reportingRepositoryProvider.overrideWithValue(TestReportingRepository()),
           ],
           child: Consumer(
             builder: (context, ref, _) {
@@ -93,6 +145,7 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith(() => TestAuthNotifier(const AuthState.authenticated(testCitizenUser))),
+            reportingRepositoryProvider.overrideWithValue(TestReportingRepository()),
           ],
           child: Consumer(
             builder: (context, ref, _) {
@@ -174,6 +227,7 @@ void main() {
         ProviderScope(
           overrides: [
             authProvider.overrideWith(() => TestAuthNotifier(const AuthState.authenticated(testCitizenUser))),
+            reportingRepositoryProvider.overrideWithValue(TestReportingRepository()),
           ],
           child: Consumer(
             builder: (context, ref, _) {
@@ -258,6 +312,230 @@ void main() {
       expect(find.text('Change Temporary Password'), findsOneWidget);
       expect(find.text('You must change your temporary password before continuing.'), findsOneWidget);
       expect(find.byType(HomeScreen), findsNothing);
+    });
+
+    testWidgets('authenticated Citizen can navigate to /citizen/reports', (tester) async {
+      late GoRouter router;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(() => TestAuthNotifier(const AuthState.authenticated(testCitizenUser))),
+            reportingRepositoryProvider.overrideWithValue(TestReportingRepository()),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              router = ref.watch(appRouterProvider);
+              return MaterialApp.router(
+                routerConfig: router,
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.byType(CitizenDashboardScreen), findsOneWidget);
+
+      router.go('/citizen/reports');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MyReportsScreen), findsOneWidget);
+    });
+
+    testWidgets('authenticated Driver attempting /citizen/reports is blocked and redirected to /driver/dashboard', (tester) async {
+      late GoRouter router;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(() => TestAuthNotifier(const AuthState.authenticated(testDriverUser))),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              router = ref.watch(appRouterProvider);
+              return MaterialApp.router(
+                routerConfig: router,
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.byType(DriverDashboardScreen), findsOneWidget);
+
+      router.go('/citizen/reports');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DriverDashboardScreen), findsOneWidget);
+      expect(find.byType(MyReportsScreen), findsNothing);
+    });
+
+    testWidgets('authenticated Citizen can navigate to /citizen/reports/:id', (tester) async {
+      late GoRouter router;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(() => TestAuthNotifier(const AuthState.authenticated(testCitizenUser))),
+            reportingRepositoryProvider.overrideWithValue(TestReportingRepository()),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              router = ref.watch(appRouterProvider);
+              return MaterialApp.router(
+                routerConfig: router,
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.byType(CitizenDashboardScreen), findsOneWidget);
+
+      router.go('/citizen/reports/rep-123');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ReportDetailScreen), findsOneWidget);
+    });
+
+    testWidgets('authenticated Driver attempting /citizen/reports/:id is blocked and redirected to /driver/dashboard', (tester) async {
+      late GoRouter router;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(() => TestAuthNotifier(const AuthState.authenticated(testDriverUser))),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              router = ref.watch(appRouterProvider);
+              return MaterialApp.router(
+                routerConfig: router,
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.byType(DriverDashboardScreen), findsOneWidget);
+
+      router.go('/citizen/reports/rep-123');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DriverDashboardScreen), findsOneWidget);
+      expect(find.byType(ReportDetailScreen), findsNothing);
+    });
+
+    testWidgets('authenticated Citizen can navigate to /citizen/reports/:id/edit', (tester) async {
+      late GoRouter router;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(() => TestAuthNotifier(const AuthState.authenticated(testCitizenUser))),
+            reportingRepositoryProvider.overrideWithValue(TestReportingRepository()),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              router = ref.watch(appRouterProvider);
+              return MaterialApp.router(
+                routerConfig: router,
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.byType(CitizenDashboardScreen), findsOneWidget);
+
+      router.go('/citizen/reports/rep-123/edit');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(EditReportScreen), findsOneWidget);
+    });
+
+    testWidgets('authenticated Driver attempting /citizen/reports/:id/edit is blocked and redirected to /driver/dashboard', (tester) async {
+      late GoRouter router;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(() => TestAuthNotifier(const AuthState.authenticated(testDriverUser))),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              router = ref.watch(appRouterProvider);
+              return MaterialApp.router(
+                routerConfig: router,
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.byType(DriverDashboardScreen), findsOneWidget);
+
+      router.go('/citizen/reports/rep-123/edit');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DriverDashboardScreen), findsOneWidget);
+      expect(find.byType(EditReportScreen), findsNothing);
+    });
+
+    testWidgets('authenticated Citizen can navigate to /citizen/reports/:id/photos', (tester) async {
+      late GoRouter router;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(() => TestAuthNotifier(const AuthState.authenticated(testCitizenUser))),
+            reportingRepositoryProvider.overrideWithValue(TestReportingRepository()),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              router = ref.watch(appRouterProvider);
+              return MaterialApp.router(
+                routerConfig: router,
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.byType(CitizenDashboardScreen), findsOneWidget);
+
+      router.go('/citizen/reports/rep-123/photos');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ManageReportPhotosScreen), findsOneWidget);
+    });
+
+    testWidgets('authenticated Driver attempting /citizen/reports/:id/photos is blocked and redirected to /driver/dashboard', (tester) async {
+      late GoRouter router;
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(() => TestAuthNotifier(const AuthState.authenticated(testDriverUser))),
+          ],
+          child: Consumer(
+            builder: (context, ref, _) {
+              router = ref.watch(appRouterProvider);
+              return MaterialApp.router(
+                routerConfig: router,
+              );
+            },
+          ),
+        ),
+      );
+
+      await tester.pumpAndSettle();
+      expect(find.byType(DriverDashboardScreen), findsOneWidget);
+
+      router.go('/citizen/reports/rep-123/photos');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DriverDashboardScreen), findsOneWidget);
+      expect(find.byType(ManageReportPhotosScreen), findsNothing);
     });
   });
 }

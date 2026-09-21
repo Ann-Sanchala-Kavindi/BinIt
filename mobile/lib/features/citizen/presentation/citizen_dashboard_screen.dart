@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
+import '../../../shared/widgets/app_loading_indicator.dart';
 import '../../auth/providers/auth_provider.dart';
+import '../../reporting/data/reporting_repository.dart';
+import '../../reporting/models/waste_report_list_item_model.dart';
+import '../../reporting/models/waste_report_status.dart';
+import '../../reporting/models/waste_type.dart';
 
 /// Authenticated Citizen Dashboard — the primary landing screen for Citizen mobile users.
 class CitizenDashboardScreen extends ConsumerWidget {
-  const CitizenDashboardScreen({super.key});
+  final ReportingRepository? repository;
+
+  const CitizenDashboardScreen({super.key, this.repository});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -77,11 +85,7 @@ class CitizenDashboardScreen extends ConsumerWidget {
                     ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              _RecentActivityEmptyState(
-                onReportTap: () {
-                  context.push('/citizen/report-waste');
-                },
-              ),
+              _RecentActivitySection(repository: repository),
               const SizedBox(height: AppSpacing.lg),
             ],
           ),
@@ -442,62 +446,402 @@ class _QuickAccessCard extends StatelessWidget {
   }
 }
 
-/// Calm, professional empty state for Citizen Recent Activity section.
-class _RecentActivityEmptyState extends StatelessWidget {
-  final VoidCallback onReportTap;
+/// Recent Activity section rendering the latest 3 waste reports for the Citizen.
+class _RecentActivitySection extends ConsumerStatefulWidget {
+  final ReportingRepository? repository;
 
-  const _RecentActivityEmptyState({required this.onReportTap});
+  const _RecentActivitySection({this.repository});
+
+  @override
+  ConsumerState<_RecentActivitySection> createState() => _RecentActivitySectionState();
+}
+
+class _RecentActivitySectionState extends ConsumerState<_RecentActivitySection> {
+  bool _isLoading = true;
+  String? _errorMessage;
+  List<WasteReportListItemModel> _recentReports = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchRecentReports();
+  }
+
+  Future<void> _fetchRecentReports() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final ReportingRepository repository = widget.repository ?? ref.read(reportingRepositoryProvider);
+      final response = await repository.getWasteReports(
+        page: 1,
+        pageSize: 3,
+        sortBy: 'createdAt',
+        sortDirection: 'desc',
+      );
+
+      if (mounted) {
+        setState(() {
+          _recentReports = response.items.take(3).toList();
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = "Couldn't load recent activity.";
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  String _formatSubmissionTime(DateTime dateTime) {
+    final local = dateTime.toLocal();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final date = DateTime(local.year, local.month, local.day);
+    final timeStr = DateFormat('h:mm a').format(local);
+
+    final diffDays = today.difference(date).inDays;
+    if (diffDays == 0) {
+      return 'Today • $timeStr';
+    } else if (diffDays == 1) {
+      return 'Yesterday • $timeStr';
+    } else if (local.year == now.year) {
+      return '${DateFormat('d MMM').format(local)} • $timeStr';
+    } else {
+      return '${DateFormat('d MMM yyyy').format(local)} • $timeStr';
+    }
+  }
+
+  Widget _buildWasteTypeIcon(WasteType type) {
+    IconData icon;
+    switch (type) {
+      case WasteType.organic:
+        icon = Icons.eco_outlined;
+        break;
+      case WasteType.recyclable:
+        icon = Icons.recycling_outlined;
+        break;
+      case WasteType.hazardous:
+        icon = Icons.warning_amber_rounded;
+        break;
+      case WasteType.bulky:
+        icon = Icons.inventory_2_outlined;
+        break;
+      case WasteType.general:
+      case WasteType.other:
+        icon = Icons.delete_outline;
+        break;
+    }
+    return Icon(icon, size: 15, color: AppColors.primaryDark);
+  }
+
+  Widget _buildStatusBadge(WasteReportStatus status) {
+    Color bg;
+    Color fg;
+    Color border;
+
+    switch (status) {
+      case WasteReportStatus.verified:
+        bg = const Color(0xFFDCFCE7); // emerald-100
+        fg = const Color(0xFF065F46); // emerald-800
+        border = const Color(0xFFA7F3D0); // emerald-200
+        break;
+      case WasteReportStatus.resolved:
+        bg = const Color(0xFFD1FAE5); // emerald-100
+        fg = const Color(0xFF047857); // emerald-800
+        border = const Color(0xFFA7F3D0); // emerald-200
+        break;
+      case WasteReportStatus.submitted:
+        bg = const Color(0xFFFEF3C7); // amber-100
+        fg = const Color(0xFF92400E); // amber-800
+        border = const Color(0xFFFDE68A); // amber-200
+        break;
+      case WasteReportStatus.underReview:
+        bg = const Color(0xFFFEF9C3); // yellow-100
+        fg = const Color(0xFF854D0E); // yellow-800
+        border = const Color(0xFFFEF08A); // yellow-200
+        break;
+      case WasteReportStatus.scheduled:
+        bg = const Color(0xFFFFFBEB); // amber-50
+        fg = const Color(0xFFB45309); // amber-700
+        border = const Color(0xFFFDE68A); // amber-200
+        break;
+      case WasteReportStatus.inProgress:
+        bg = const Color(0xFFFFEDD5); // orange-100
+        fg = const Color(0xFF9A3412); // orange-800
+        border = const Color(0xFFFED7AA); // orange-200
+        break;
+      case WasteReportStatus.rejected:
+        bg = const Color(0xFFFEE2E2); // red-100
+        fg = const Color(0xFF991B1B); // red-800
+        border = const Color(0xFFFECACA); // red-200
+        break;
+      case WasteReportStatus.cancelled:
+        bg = const Color(0xFFF1F5F9); // slate-100
+        fg = const Color(0xFF475569); // slate-600
+        border = const Color(0xFFCBD5E1); // slate-300
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: AppSpacing.roundedFull,
+        border: Border.all(color: border, width: 1),
+      ),
+      child: Text(
+        status.displayName,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: fg,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActivityRow(WasteReportListItemModel report) {
+    return InkWell(
+      key: Key('recent_activity_item_${report.id}'),
+      onTap: () async {
+        await context.push('/citizen/reports/${report.id}');
+        if (mounted) {
+          _fetchRecentReports();
+        }
+      },
+      borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row: Waste type badge/info + Status badge
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: AppColors.primaryLight,
+                        shape: BoxShape.circle,
+                      ),
+                      child: _buildWasteTypeIcon(report.wasteType),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        report.wasteType.displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              _buildStatusBadge(report.status),
+            ],
+          ),
+
+          // Optional address row
+          if (report.addressText != null && report.addressText!.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                const Icon(
+                  Icons.place_outlined,
+                  size: 13,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    report.addressText!.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+
+          // Submission date/time row
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              const Icon(
+                Icons.schedule_outlined,
+                size: 13,
+                color: AppColors.textMuted,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  _formatSubmissionTime(report.createdAt),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.xl,
-      ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: const BoxDecoration(
-                color: AppColors.surfaceSubtle,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.inbox_outlined,
-                size: 28,
-                color: AppColors.textMuted,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            const Text(
-              'No Recent Activity',
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            const Text(
-              'Your submitted waste reports, status updates, and service responses will appear here.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12,
-                color: AppColors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            AppButton.text(
-              label: 'Report Waste Now',
-              icon: Icons.add_circle_outline,
-              onPressed: onReportTap,
-            ),
-          ],
+    if (_isLoading) {
+      return AppCard(
+        key: const Key('citizen_recent_activity_loading'),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.xl,
         ),
+        child: const Center(
+          child: AppLoadingIndicator(
+            size: 24.0,
+            strokeWidth: 2.5,
+            message: 'Loading recent activity...',
+          ),
+        ),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return AppCard(
+        key: const Key('citizen_recent_activity_error'),
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 28,
+                color: AppColors.error,
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              const Text(
+                "Couldn't load recent activity.",
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              AppButton.outlined(
+                key: const Key('citizen_recent_activity_retry_button'),
+                label: 'Retry',
+                icon: Icons.refresh_rounded,
+                height: 38.0,
+                isFullWidth: false,
+                onPressed: _fetchRecentReports,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_recentReports.isEmpty) {
+      return AppCard(
+        key: const Key('citizen_recent_activity_empty'),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.lg,
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.sm),
+                decoration: const BoxDecoration(
+                  color: AppColors.surfaceSubtle,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.inbox_outlined,
+                  size: 24,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              const Text(
+                'No recent reports yet.',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xxs),
+              const Text(
+                'Submit a waste report to see activity here.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return AppCard(
+      key: const Key('citizen_recent_activity_card'),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (int i = 0; i < _recentReports.length; i++) ...[
+            if (i > 0) const Divider(height: 1, color: AppColors.border),
+            _buildActivityRow(_recentReports[i]),
+          ],
+          const SizedBox(height: AppSpacing.xs),
+          const Divider(height: 1, color: AppColors.border),
+          const SizedBox(height: AppSpacing.sm),
+          AppButton.outlined(
+            key: const Key('citizen_view_all_reports_button'),
+            label: 'View All Reports',
+            icon: Icons.arrow_forward,
+            height: 40.0,
+            onPressed: () {
+              context.go('/citizen/reports');
+            },
+          ),
+        ],
       ),
     );
   }

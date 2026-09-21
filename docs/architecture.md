@@ -71,7 +71,7 @@ The application is decomposed into four cohesive business components, each match
 
 | Component | Scope & Mission | Primary Actor | Primary Client |
 | :--- | :--- | :--- | :--- |
-| **1. Waste Reporting & Citizen Management** | Citizen waste issue reporting, photo uploads, officer field verification, priority assignment, and citizen engagement. | **Citizen** (Public)<br>**WasteOfficer** (Field) | **Flutter** (Citizen)<br>**React** (Officer) |
+| **1. Waste Reporting & Citizen Management** | Citizen waste issue reporting, photo uploads, officer field verification, and citizen engagement. | **Citizen** (Public)<br>**WasteOfficer** (Field) | **Flutter** (Citizen)<br>**React** (Officer) |
 | **2. Waste Collection & Bin Management** | Bin registry, zone division, fill-level monitoring, routine schedule generation, and collection task assembly. | **WasteOfficer** | **React** |
 | **3. Fleet, Driver & Route Management** | Collection vehicle inventory, driver duty tracking, vehicle/driver dispatch assignment, route optimization, and waypoint execution. | **Driver**<br>**WasteOfficer** | **Flutter** (Driver)<br>**React** (Officer) |
 | **4. Operations, Complaints & Analytics** | Citizen grievances, operational field incidents, notifications, multi-agent AI approval workflows, and executive analytics. | **MunicipalManager**<br>**Citizen** | **React** (Manager)<br>**Flutter** (Citizen) |
@@ -99,7 +99,7 @@ public static class AppRoles
    - Files and monitors own `Complaint` records.
    - Cannot verify reports, dispatch tasks, view other citizens' records, or approve AI workflows.
 2. **`WasteOfficer`**:
-   - Verifies or rejects citizen waste reports and assigns initial priority.
+   - Verifies or rejects citizen waste reports.
    - Manages smart bin records and collection zones.
    - Creates and manages collection schedules and dispatches tasks.
    - Initiates AI planning workflows.
@@ -235,8 +235,16 @@ ai-service/
 - **Framework:** FastAPI with Uvicorn server running on `127.0.0.1:8000`.
 - **Graph Orchestration:** `langgraph` installed and importable.
 - **Operational Endpoints:** `GET /health` responding with `{"status":"healthy","service":"SmartWaste AI Service"}`.
-- **Connectivity:** ASP.NET Core `AiServiceClient` verified via integration and unit tests.
-- **Pending:** LLM providers (OpenAI, Gemini, Anthropic) and domain-specific agents are **not yet connected**; will be added in subsequent phases.
+- **LLM Provider Decision (Step 9A.14a):**
+  - **Authoritative Provider:** Google Gemini API via `langchain-google-genai` (`ChatGoogleGenerativeAI`).
+  - **Configuration (Environment Variables):**
+    - `LLM_PROVIDER`: `"mock"` (default for offline automated tests) or `"google"` (for live development/demo).
+    - `LLM_MODEL`: Model identifier (e.g. `gemini-1.5-flash`).
+    - `LLM_API_KEY`: Runtime secret key (never committed; loaded from gitignored `.env` or runtime environment).
+    - `LLM_TEMPERATURE`: Default `0.0` for deterministic structured output.
+    - `LLM_TIMEOUT`: Default `30.0` seconds.
+  - **Offline Testing:** Automated pytest suites use `LLM_PROVIDER="mock"` with zero live network calls and no live API keys.
+  - **ADR Notice:** This selection represents the project's authoritative model provider decision and will be formalized in the final Agentic AI ADR.
 
 ---
 
@@ -249,7 +257,7 @@ flowchart TD
     Initiate["ASP.NET Core:\nInitiates AI Workflow (POST /api/v1/ai/workflows)"]
     Planner["1. Planner Agent (Shared Orchestrator)\nDeconstructs objective into sub-tasks"]
     
-    WasteAgent["2. Waste Analysis Agent\n(Student 1: Component 1)\nEvaluates waste type & priority"]
+    WasteAgent["2. Waste Analysis Agent\n(Student 1: Component 1)\nEvaluates waste type & recommends priority"]
     CollectionAgent["3. Collection Planning Agent\n(Student 2: Component 2)\nEvaluates bin fullness & zones"]
     FleetAgent["4. Fleet & Route Agent\n(Student 3: Component 3)\nOptimizes vehicle & route sequence"]
     ValidationAgent["5. Validation & Operations Agent\n(Student 4: Component 4)\nChecks capacity, driver status & SLA"]
@@ -284,14 +292,23 @@ To ensure distinct individual academic contributions while maintaining architect
    - Deconstructs municipal objectives into sequenced agent tasks.
    - Aggregates agent findings into a cohesive proposal.
 2. **Waste Analysis Agent (Student 1 — Component 1)**:
-   - Analyzes reported waste descriptions and classification tags.
-   - Assesses public health risk and urgency based on location context.
+   - **Responsibility:** Analyses already-verified WasteReports and produces a structured, non-authoritative operational assessment for downstream collection planning.
+   - **Allowed Tools:** Strictly allow-listed `get_verified_waste_reports` tool (retrieving authoritative `Verified` reports via ASP.NET Core internal authenticated endpoint). Zero direct PostgreSQL or Supabase access.
+   - **Input Contract (`WasteAnalysisRequest`):** `objective` (string, 5-500 chars), `page` (int >= 1), `page_size` (int 1-50).
+   - **Structured Output Contract (`WasteAnalysisResult` / `WasteReportAnalysis`):** `reportId`, `categoryAssessment`, `recommendedPriority` (`Low`, `Medium`, `High`, `Urgent`), `operationalConcerns` (0-5 items), `recommendedHandling`, `confidence` (`Low`, `Medium`, `High`), `rationale`.
+   - **Advisory Recommendation Semantics:** `recommendedPriority` is purely advisory for downstream planning; it NEVER mutates authoritative `WasteReport.Priority` or `WasteReport.Status` in the database.
+   - **Safety Boundaries:**
+     - *No Image Analysis:* `attachmentCount` indicates file presence only. Agent never inspects photos or claims visual evidence.
+     - *Location Boundary:* GPS coordinates and address are raw reported data; agent never invents road names, traffic, distance, or route facts.
+     - *Prompt-Injection Resistance:* Report fields are untrusted citizen data; instructions embedded in descriptions are strictly ignored.
+     - *Exact Coverage Rule:* Produces exactly one analysis per verified report returned by the tool.
+   - **Planner Delegation:** Shared Planner Agent will delegate objectives to this specialized agent in multi-agent workflows.
 3. **Collection Planning Agent (Student 2 — Component 2)**:
    - Aggregates verified reports with scheduled zone bins.
    - Evaluates bin fill-level urgency and identifies required stops.
 4. **Fleet & Route Agent (Student 3 — Component 3)**:
    - Evaluates available vehicles matching required capacity and waste type.
-   - Calculates optimal traveling sequence for waypoints to minimize travel time.
+   - Performs route planning/optimization for waypoints to minimize travel time.
 5. **Validation & Operations Agent (Student 4 — Component 4)**:
    - Pre-evaluates operational feasibility against historical SLA metrics.
    - Validates that proposal adheres to municipal collection guidelines.

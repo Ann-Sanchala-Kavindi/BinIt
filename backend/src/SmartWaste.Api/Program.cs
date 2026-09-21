@@ -1,9 +1,11 @@
 using System.Text;
+using System.Text.Json.Serialization;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using SmartWaste.Api.Authentication.InternalService;
 using SmartWaste.Api.Middleware;
 using SmartWaste.Application.Validators;
 using SmartWaste.Infrastructure;
@@ -11,8 +13,13 @@ using SmartWaste.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ─── Controllers ────────────────────────────────────────────────────────────
-builder.Services.AddControllers();
+// ─── Controllers & JSON Options ─────────────────────────────────────────────
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(
+            new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false));
+    });
 
 // ─── FluentValidation ───────────────────────────────────────────────────────
 builder.Services.AddFluentValidationAutoValidation();
@@ -59,13 +66,20 @@ builder.Services.AddSwaggerGen(options =>
 // ─── Infrastructure (EF Core + PostgreSQL + Identity + AuthService) ─────────
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// ─── JWT Authentication ─────────────────────────────────────────────────────
+// ─── JWT & Internal Service Authentication ──────────────────────────────────
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
-.AddJwtBearer();
+.AddJwtBearer()
+.AddScheme<InternalServiceAuthOptions, InternalServiceAuthHandler>(
+    InternalServiceDefaults.AuthenticationScheme,
+    options =>
+    {
+        var internalSection = builder.Configuration.GetSection("InternalService");
+        options.ServiceKey = internalSection["ApiKey"];
+    });
 
 // Configure JwtBearerOptions via DI configuration to ensure dynamic configuration binding
 builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
@@ -95,7 +109,15 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(InternalServiceDefaults.PolicyName, policy =>
+    {
+        policy.AddAuthenticationSchemes(InternalServiceDefaults.AuthenticationScheme);
+        policy.RequireAuthenticatedUser();
+        policy.RequireRole(InternalServiceDefaults.Role);
+    });
+});
 
 // ─── CORS – Development Placeholder ─────────────────────────────────────────
 builder.Services.AddCors(options =>

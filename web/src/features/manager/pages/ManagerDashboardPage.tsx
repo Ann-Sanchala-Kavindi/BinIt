@@ -133,6 +133,7 @@ export const ManagerDashboardPage: React.FC = () => {
             description="Field exceptions reported"
             icon={<OperationsIcon />}
             variant="mint"
+            to="/manager/reports"
           />
           <OverviewCard
             label="Unresolved Complaints"
