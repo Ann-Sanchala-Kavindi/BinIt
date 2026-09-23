@@ -48,6 +48,10 @@ class ApiConstants {
   static String wasteReportAttachment(String reportId, String attachmentId) =>
       '/waste-reports/$reportId/attachments/$attachmentId';
 
+  // Public citizen bin discovery endpoints
+  static const String publicWasteBins = '/bins/public';
+  static String publicWasteBinDetail(String id) => '/bins/public/$id';
+
   // Network timeouts
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);

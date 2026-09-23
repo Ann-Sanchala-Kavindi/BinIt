@@ -208,7 +208,7 @@ describe('WasteOfficer Dashboard', () => {
     // Verify all 5 module titles in quick access cards and sidebar
     expect(screen.getAllByText('Waste Reports').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Bin Management').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Collection Schedules').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Collection Needs').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Collection Tasks').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Complaints').length).toBeGreaterThanOrEqual(1);
   });

@@ -6,6 +6,7 @@ import type {
   WasteReportDetailDto,
   WasteReportStatusHistoryDto,
   RejectWasteReportRequest,
+  VerifyWasteReportRequest,
 } from '../types/reporting';
 
 export const reportingApi = {
@@ -85,8 +86,8 @@ export const reportingApi = {
    * Waste Officer verifies an under-review report (UnderReview -> Verified).
    * Authoritative Endpoint: POST /api/v1/waste-reports/{id}/verify
    */
-  verifyReport: async (id: string): Promise<WasteReportDetailDto> => {
-    const response = await axiosClient.post<WasteReportDetailDto>(`/waste-reports/${id}/verify`);
+  verifyReport: async (id: string, priority: VerifyWasteReportRequest['priority']): Promise<WasteReportDetailDto> => {
+    const response = await axiosClient.post<WasteReportDetailDto>(`/waste-reports/${id}/verify`, { priority });
     return response.data;
   },
 

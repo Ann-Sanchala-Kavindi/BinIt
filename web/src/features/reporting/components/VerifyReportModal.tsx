@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import type { WasteReportPriority } from '../types/reporting';
 import { Button } from '../../../components/ui/Button';
 
 export interface VerifyReportModalProps {
   isOpen: boolean;
   isSubmitting: boolean;
-  onConfirm: () => void;
+  onConfirm: (priority: WasteReportPriority) => void;
   onCancel: () => void;
 }
 
@@ -14,6 +15,7 @@ export const VerifyReportModal: React.FC<VerifyReportModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const [priority, setPriority] = useState<WasteReportPriority | ''>('');
   useEffect(() => {
     if (!isOpen) return;
 
@@ -68,6 +70,7 @@ export const VerifyReportModal: React.FC<VerifyReportModalProps> = ({
             </p>
           </div>
         </div>
+        <label className="block text-sm font-semibold text-slate-800">Priority <span className="text-rose-600">*</span><select aria-label="Verification priority" value={priority} disabled={isSubmitting} onChange={(e) => setPriority(e.target.value as WasteReportPriority)} className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2"><option value="">Select priority</option>{(['Low', 'Medium', 'High', 'Urgent'] as WasteReportPriority[]).map((value) => <option key={value}>{value}</option>)}</select></label>
 
         <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
           <Button
@@ -84,9 +87,9 @@ export const VerifyReportModal: React.FC<VerifyReportModalProps> = ({
             type="button"
             variant="primary"
             size="sm"
-            onClick={onConfirm}
+            onClick={() => priority && onConfirm(priority)}
             isLoading={isSubmitting}
-            disabled={isSubmitting}
+            disabled={isSubmitting || !priority}
             className="text-xs inline-flex items-center gap-1.5"
             data-testid="confirm-verify-report-button"
           >

@@ -831,7 +831,7 @@ public class WasteReportServiceTests
         var report = await SeedReportAsync(db, citizen.Id, WasteReportStatus.UnderReview);
         var svc = CreateService(db, um);
 
-        var dto = await svc.VerifyAsync(report.Id, officer.Id, AppRoles.WasteOfficer);
+        var dto = await svc.VerifyAsync(report.Id, new VerifyWasteReportRequest { Priority = WasteReportPriority.Low }, officer.Id, AppRoles.WasteOfficer);
 
         dto.Status.Should().Be(WasteReportStatus.Verified);
     }
@@ -846,7 +846,7 @@ public class WasteReportServiceTests
         var svc = CreateService(db, um);
 
         var before = DateTime.UtcNow;
-        var dto = await svc.VerifyAsync(report.Id, officer.Id, AppRoles.WasteOfficer);
+        var dto = await svc.VerifyAsync(report.Id, new VerifyWasteReportRequest { Priority = WasteReportPriority.Medium }, officer.Id, AppRoles.WasteOfficer);
 
         dto.VerifiedByUserId.Should().Be(officer.Id);
         dto.VerifiedAt.Should().NotBeNull();
@@ -855,7 +855,7 @@ public class WasteReportServiceTests
     }
 
     [Fact]
-    public async Task VerifyAsync_PriorityRemainsNull()
+    public async Task VerifyAsync_PersistsSelectedPriority()
     {
         var (db, um) = CreateContext();
         var citizen = await SeedUserAsync(db, um);
@@ -863,9 +863,9 @@ public class WasteReportServiceTests
         var report = await SeedReportAsync(db, citizen.Id, WasteReportStatus.UnderReview);
         var svc = CreateService(db, um);
 
-        var dto = await svc.VerifyAsync(report.Id, officer.Id, AppRoles.WasteOfficer);
+        var dto = await svc.VerifyAsync(report.Id, new VerifyWasteReportRequest { Priority = WasteReportPriority.Urgent }, officer.Id, AppRoles.WasteOfficer);
 
-        dto.Priority.Should().BeNull("Component 1 verification must never assign Priority");
+        dto.Priority.Should().Be(WasteReportPriority.Urgent);
     }
 
     [Fact]
@@ -877,7 +877,7 @@ public class WasteReportServiceTests
         var report = await SeedReportAsync(db, citizen.Id, WasteReportStatus.UnderReview);
         var svc = CreateService(db, um);
 
-        await svc.VerifyAsync(report.Id, officer.Id, AppRoles.WasteOfficer);
+        await svc.VerifyAsync(report.Id, new VerifyWasteReportRequest { Priority = WasteReportPriority.High }, officer.Id, AppRoles.WasteOfficer);
 
         var history = await db.WasteReportStatusHistories
             .Where(h => h.WasteReportId == report.Id).ToListAsync();

@@ -3,12 +3,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile/core/network/api_exception.dart';
 import 'package:mobile/core/routing/app_router.dart';
+import 'package:mobile/features/bins/data/public_waste_bins_repository.dart';
+import 'package:mobile/features/bins/models/paged_public_waste_bins_model.dart';
+import 'package:mobile/features/bins/models/public_waste_bin_detail_model.dart';
+import 'package:mobile/features/bins/models/public_waste_bin_query.dart';
+import 'package:mobile/features/bins/presentation/find_bins_screen.dart';
 import 'package:mobile/features/auth/models/auth_user.dart';
 import 'package:mobile/features/auth/presentation/change_password_screen.dart';
 import 'package:mobile/features/auth/presentation/login_screen.dart';
 import 'package:mobile/features/auth/providers/auth_provider.dart';
 import 'package:mobile/features/citizen/presentation/citizen_dashboard_screen.dart';
-import 'package:mobile/features/citizen/presentation/citizen_placeholder_screen.dart';
 import 'package:mobile/features/reporting/data/reporting_repository.dart';
 import 'package:mobile/features/reporting/models/paged_waste_reports_model.dart';
 import 'package:mobile/features/reporting/models/waste_report_list_item_model.dart';
@@ -136,6 +140,24 @@ class MockCitizenAuthNotifier extends AuthNotifier {
   }
 }
 
+class MockPublicWasteBinsRepository extends PublicWasteBinsRepository {
+  @override
+  Future<PagedPublicWasteBinsModel> getPublicWasteBins(PublicWasteBinQuery query) async {
+    return PagedPublicWasteBinsModel(
+      items: const [],
+      page: query.page,
+      pageSize: query.pageSize,
+      totalCount: 0,
+      totalPages: 1,
+    );
+  }
+
+  @override
+  Future<PublicWasteBinDetailModel> getPublicWasteBin(String binId) {
+    throw UnimplementedError();
+  }
+}
+
 void main() {
   late MockReportingRepository mockRepo;
 
@@ -153,6 +175,7 @@ void main() {
   Widget createCitizenTestApp({
     AuthNotifier Function()? notifierOverride,
     ReportingRepository? repositoryOverride,
+    PublicWasteBinsRepository? publicBinsRepositoryOverride,
     Size? surfaceSize,
     Key? key,
   }) {
@@ -163,6 +186,9 @@ void main() {
           notifierOverride ?? () => MockCitizenAuthNotifier(const AuthState.authenticated(citizenUser)),
         ),
         reportingRepositoryProvider.overrideWithValue(repositoryOverride ?? mockRepo),
+        publicWasteBinsRepositoryProvider.overrideWithValue(
+          publicBinsRepositoryOverride ?? MockPublicWasteBinsRepository(),
+        ),
       ],
       child: Consumer(
         builder: (context, ref, _) {
@@ -262,7 +288,7 @@ void main() {
       expect(find.byType(CitizenDashboardScreen), findsOneWidget);
     });
 
-    testWidgets('tapping Nearby Bins card navigates to /citizen/nearby-bins placeholder', (tester) async {
+    testWidgets('tapping Nearby Bins card navigates to Find a Bin', (tester) async {
       await tester.pumpWidget(createCitizenTestApp());
       await tester.pumpAndSettle();
 
@@ -271,12 +297,11 @@ void main() {
       await tester.tap(binsCard);
       await tester.pumpAndSettle();
 
-      // Should be on Nearby Bins placeholder screen
-      expect(find.byType(CitizenPlaceholderScreen), findsOneWidget);
-      expect(find.text('Find waste bins near your location.'), findsOneWidget);
+      expect(find.byType(FindBinsScreen), findsOneWidget);
+      expect(find.text('Find a Bin'), findsOneWidget);
 
       // Back to dashboard
-      final backButton = find.byKey(const Key('placeholder_back_button'));
+      final backButton = find.byTooltip('Back');
       await tester.tap(backButton);
       await tester.pumpAndSettle();
 
@@ -704,4 +729,5 @@ void main() {
       expect(find.byKey(const Key('citizen_recent_activity_card')), findsOneWidget);
     });
   });
+
 }
