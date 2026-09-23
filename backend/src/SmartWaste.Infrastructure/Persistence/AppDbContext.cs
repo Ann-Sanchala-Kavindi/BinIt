@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using SmartWaste.Domain.Collection.Entities;
 using SmartWaste.Domain.Entities;
 using SmartWaste.Domain.Reporting.Entities;
 
@@ -17,9 +18,18 @@ public class AppDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
     {
     }
 
+    // Component 1 — Waste Reporting & Citizen Management
     public DbSet<WasteReport> WasteReports => Set<WasteReport>();
     public DbSet<ReportAttachment> ReportAttachments => Set<ReportAttachment>();
     public DbSet<WasteReportStatusHistory> WasteReportStatusHistories => Set<WasteReportStatusHistory>();
+
+    // Component 2 — Waste Collection & Bin Management
+    public DbSet<WasteBin> WasteBins => Set<WasteBin>();
+    public DbSet<WasteBinAcceptedWasteType> WasteBinAcceptedWasteTypes => Set<WasteBinAcceptedWasteType>();
+    public DbSet<BinObservation> BinObservations => Set<BinObservation>();
+    public DbSet<CollectionTask> CollectionTasks => Set<CollectionTask>();
+    public DbSet<CollectionTaskStatusHistory> CollectionTaskStatusHistories => Set<CollectionTaskStatusHistory>();
+    public DbSet<CollectionTaskScheduleHistory> CollectionTaskScheduleHistories => Set<CollectionTaskScheduleHistory>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

@@ -2,10 +2,12 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using SmartWaste.Application.Collection.Interfaces;
 using SmartWaste.Application.Common.Options;
 using SmartWaste.Application.Interfaces;
 using SmartWaste.Application.Reporting.Interfaces;
 using SmartWaste.Domain.Entities;
+using SmartWaste.Infrastructure.Collection.Services;
 using SmartWaste.Infrastructure.Persistence;
 using SmartWaste.Infrastructure.Reporting.Services;
 using SmartWaste.Infrastructure.Services;
@@ -60,6 +62,12 @@ public static class DependencyInjection
         // Component 1 — Waste Reporting & Citizen Management
         services.AddScoped<IWasteReportService, WasteReportService>();
         services.AddScoped<IWasteReportAttachmentService, WasteReportAttachmentService>();
+
+        // Component 2 — Waste Collection & Bin Management
+        services.AddScoped<IWasteBinService, WasteBinService>();
+        services.AddScoped<IBinObservationService, BinObservationService>();
+        services.AddScoped<ICollectionNeedService, CollectionNeedService>();
+        services.AddScoped<ICollectionTaskService, CollectionTaskService>();
 
         // Cloud Storage — Supabase Storage
         var storageSection = configuration.GetSection(SmartWaste.Infrastructure.Reporting.Storage.SupabaseStorageOptions.SectionName);

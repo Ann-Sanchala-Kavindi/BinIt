@@ -136,7 +136,7 @@ Submitted ──> UnderReview ──> Verified ──> Scheduled ──> InProgr
 | *(None)* | `Submitted` | `POST /api/v1/waste-reports` | `Citizen` | Valid payload; `CitizenId` set from JWT; initial status history created atomically. |
 | `Submitted` | `UnderReview` | `POST /api/v1/waste-reports/{id}/start-review` | `WasteOfficer` | Report in `Submitted`; locks citizen editing/cancellation; history logged. Viewing does not start review. |
 | `Submitted` | `Cancelled` | `DELETE /api/v1/waste-reports/{id}` | `Citizen` (Owner) | Report in `Submitted`; business cancellation (no hard delete); no citizen-supplied cancellation reason required (`Notes` is null or backend default "Cancelled by citizen"). |
-| `UnderReview` | `Verified` | `POST /api/v1/waste-reports/{id}/verify` | `WasteOfficer` | Report in `UnderReview`; sets `Status = Verified`, `VerifiedByUserId`, `VerifiedAt`, `UpdatedAt`; history logged. Verification does NOT assign Priority (`WasteReportPriority?` remains null). Report becomes eligible for later AI planning. |
+| `UnderReview` | `Verified` | `POST /api/v1/waste-reports/{id}/verify` | `WasteOfficer` | Report in `UnderReview`; requires and persists a valid Priority, then sets `Status = Verified`, `VerifiedByUserId`, `VerifiedAt`, `UpdatedAt`; history logged. |
 | `UnderReview` | `Rejected` | `POST /api/v1/waste-reports/{id}/reject` | `WasteOfficer` | Report in `UnderReview`; required `reason` (5–500 chars) stored in `WasteReportStatusHistory.Notes`. |
 | `Verified` | `Scheduled` | Approved collection plan / authoritative `CollectionTask` creation | *Component 2 Operational Workflow (ASP.NET Core)* | Linked to planned `CollectionTask`. AI may recommend scheduling in later phases, but AI has zero direct write access to PostgreSQL; authoritative transition and task creation are executed solely via ASP.NET Core. |
 | `Scheduled` | `InProgress` | Authoritative start of collection work associated with the report/task | *Component 3 Operational Workflow (ASP.NET Core)* | Triggered by the authoritative start of collection work associated with the report/task. Route, RouteStop, and WasteReport state transitions are kept conceptually separate. |
@@ -202,137 +202,351 @@ Audit record tracking every state change for accountability, timeline visualizat
   - When a report is rejected by a `WasteOfficer`, the mandatory rejection reason (5–500 characters) is persisted in `WasteReportStatusHistory.Notes`. No separate `RejectionReason` column exists on `WasteReport`.
   - When a report is cancelled by a `Citizen`, no cancellation reason is required; `Notes` is persisted as `null` or a backend default `"Cancelled by citizen"`.
 
----
-
 ## 4. Component 2 — Waste Collection & Bin Management
 
-### 4.1 `CollectionZone`
-Geographical division for municipal waste operations.
+### 4.0 Architectural & Component Scope Overview
+Component 2 manages public roadside waste bins, auditable manual fill/condition observations, configured routine collection weekdays, identification of collection needs (derived read model), individual collection task records, and manual/rescheduled task management.
+
+- **Authoritative Gateway:** ASP.NET Core owns database persistence, business validation, C1 report synchronization, and task scheduling.
+- **Physical Bins:** The system manages public roadside bins (no IoT sensors). Bins accept one or more waste types.
+- **Three Separate Bin Concepts:**
+  1. *Administrative Status:* Operational lifecycle state (`Active`, `OutOfService`, `Retired`).
+  2. *Physical Condition:* Physical integrity state from latest observation (`Good`, `Damaged`, `Blocked`, `Missing`).
+  3. *Observed Fill Level:* Manual discrete reading (`0%`, `25%`, `50%`, `75%`, `100%`). No observation means `Unknown`, not 0%.
+- **Municipality Timezone:** Routine collection weekdays and local due dates are evaluated in the municipality's configured timezone (`Municipality:TimeZoneId`, e.g. `"Asia/Colombo"` / UTC+5:30). All database timestamps and `ScheduledAt` are stored in UTC (`timestamptz`).
+- **Manual Observation Freshness:** Freshness threshold is **48 hours** based on authoritative server time. Observations older than 48 hours are stale; public availability falls back to `Unknown`.
+- **Collection Needs as Derived Read Model:** Collection needs are derived dynamically from three sources (Verified WasteReports, Full/Blocked bins, Routine due bins). Collection needs are NOT stored in a persisted `CollectionNeed` table.
+- **One Task = One Location:** A `CollectionTask` represents one collection job at one location targeting EITHER one `WasteReport` OR one `WasteBin` (enforced via database XOR check constraint).
+
+---
+
+### 4.1 `WasteBin`
+Represents a registered municipal roadside public waste bin.
 
 | Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
 | `Id` | `Guid` | No | Primary Key (`uuid`). |
-| `Name` | `string` | No | Zone name/identifier, e.g., "Zone 1 - Colombo North" (`varchar(100)`). |
-| `Description` | `string` | Yes | Boundary or regional details (`text`). |
-| `IsActive` | `bool` | No | Operational status flag (default: `true`). |
-| `CreatedAt` | `DateTime` | No | UTC creation timestamp. |
-| `UpdatedAt` | `DateTime` | Yes | UTC timestamp of last update. |
+| `BinCode` | `string` | No | Unique municipal asset code, e.g., `BIN-COL-0042` (`varchar(50)`). **Unique**. |
+| `CapacityLiters` | `int` | No | Total physical volume capacity in liters (e.g., 240, 660, 1100). Must be > 0. |
+| `Latitude` | `double` | No | Geospatial latitude (-90.0 to 90.0). |
+| `Longitude` | `double` | No | Geospatial longitude (-180.0 to 180.0). |
+| `AddressText` | `string` | Yes | Human-readable address or landmark description (`varchar(500)`). |
+| `AdministrativeStatus` | `string` | No | Administrative operational status (`varchar(50)`). Values: `Active`, `OutOfService`, `Retired`. Default: `Active`. |
+| `CollectionWeekdays` | `int[]` | No | Routine collection weekdays stored as PostgreSQL integer array (`integer[]`). ISO 8601 day numbers (`1` = Monday ... `7` = Sunday). Validated duplicate-free; empty array `[]` allowed for on-demand bins. |
+| `LastCollectedAt` | `DateTime` | Yes | UTC timestamp when collection was actually completed and verified (`timestamptz`). Set only upon actual collection completion, not task creation. |
+| `CreatedAt` | `DateTime` | No | UTC creation timestamp (`timestamptz`). |
+| `UpdatedAt` | `DateTime` | Yes | UTC timestamp of last metadata update (`timestamptz`). |
+
+#### Database Constraints & Indexes
+- **Unique Index:** `IX_WasteBins_BinCode` on `BinCode` (Unique).
+- **Check Constraints:**
+  - `CK_WasteBins_CapacityLiters`: `"CapacityLiters" > 0`
+  - `CK_WasteBins_Coordinates`: `"Latitude" >= -90.0 AND "Latitude" <= 90.0 AND "Longitude" >= -180.0 AND "Longitude" <= 180.0`
+  - `CK_WasteBins_AdministrativeStatus`: `"AdministrativeStatus" IN ('Active', 'OutOfService', 'Retired')`
+- **Query Indexes:**
+  - `IX_WasteBins_AdministrativeStatus` on `AdministrativeStatus`.
+  - Spatial compound index: `IX_WasteBins_Coordinates` on `(Latitude, Longitude)`.
 
 ---
 
-### 4.2 `WasteBin`
-Physical public waste bin or smart bin station.
+### 4.2 `WasteBinAcceptedWasteType`
+Join entity defining accepted waste categories for a roadside bin. Enables multi-stream waste disposal at a single bin station.
+
+| Field | Type | Nullable | Description |
+| :--- | :--- | :--- | :--- |
+| `WasteBinId` | `Guid` | No | PK & FK to `WasteBins.Id` (Cascade delete). |
+| `WasteType` | `string` | No | PK. Reuses `SmartWaste.Domain.Reporting.Enums.WasteType` (`varchar(50)`: `General`, `Organic`, `Recyclable`, `Hazardous`, `Bulky`, `Other`). |
+
+- **Composite Primary Key:** `(WasteBinId, WasteType)`.
+- **Application Invariant:** Every registered bin must have at least one accepted waste type. Attempting to register or update a bin with zero accepted types is rejected with 400 BadRequest.
+
+---
+
+### 4.3 `BinObservation`
+Append-only manual inspection record recording bin fill level and physical condition.
 
 | Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
 | `Id` | `Guid` | No | Primary Key (`uuid`). |
-| `CollectionZoneId`| `Guid` | No | FK to `CollectionZone.Id` (Restrict delete). |
-| `BinCode` | `string` | No | Unique municipal asset code, e.g., `BIN-ZN1-0042` (`varchar(50)`). **Unique**. |
-| `Latitude` | `double` | No | Geospatial latitude. |
-| `Longitude` | `double` | No | Geospatial longitude. |
-| `Capacity` | `double` | No | Total volume capacity in liters (e.g., 240.0, 1100.0). |
-| `CurrentFillLevel`| `double` | Yes | Estimated percentage (0.0% to 100.0%). |
-| `Status` | `string` | No | Operational status (`varchar(50)`). Default: `Active`. |
-| `LastCollectedAt` | `DateTime` | Yes | UTC timestamp of most recent pickup. |
-| `CreatedAt` | `DateTime` | No | UTC creation timestamp. |
-| `UpdatedAt` | `DateTime` | Yes | UTC timestamp of last update. |
+| `WasteBinId` | `Guid` | No | FK to `WasteBins.Id` (Cascade delete). |
+| `FillLevelPercent` | `int` | No | Discrete estimated fill level (`int`). Permitted values: `0`, `25`, `50`, `75`, `100`. |
+| `Condition` | `string` | No | Physical condition assessment (`varchar(30)`). Values: `Good`, `Damaged`, `Blocked`, `Missing`. |
+| `Notes` | `string` | Yes | Field inspection remarks (`varchar(500)`). |
+| `RecordedByUserId` | `Guid` | No | FK to `AppUsers.Id` (WasteOfficer now; authorized Driver in future C3) (Restrict delete). |
+| `RecordedAt` | `DateTime` | No | Server-generated UTC timestamp of observation (`timestamptz`). |
 
-#### Bin Status Values
-- `Active`: Normal operational bin in service.
-- `Full`: Bin fill level exceeds collection threshold (e.g., $\ge 80\%$) requiring dispatch.
-- `Maintenance`: Bin damaged, vandalized, or undergoing repairs.
-- `Inactive`: Decommissioned or removed from the street.
+#### Observation Invariants & Database Rules
+- **Check Constraints:**
+  - `CK_BinObservations_FillLevelPercent`: `"FillLevelPercent" IN (0, 25, 50, 75, 100)`
+  - `CK_BinObservations_Condition`: `"Condition" IN ('Good', 'Damaged', 'Blocked', 'Missing')`
+- **Append-Only Nature:** Observations are strictly immutable once created. No update or delete endpoints exist.
+- **Deterministic Latest Observation:**
+  The current observation for a bin is resolved by ordering: `RecordedAt DESC, Id DESC`.
+- **Indexes:**
+  - `IX_BinObservations_WasteBinId_RecordedAt` on `(WasteBinId, RecordedAt DESC)`.
+  - `IX_BinObservations_RecordedByUserId` on `RecordedByUserId`.
 
 ---
 
-### 4.3 `CollectionSchedule`
-Planned recurring or calendar-based collection routine for a zone.
+### 4.4 `CollectionTask`
+Authoritative unit of collection work dispatched to clear a verified citizen waste report OR empty a roadside bin.
 
 | Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
 | `Id` | `Guid` | No | Primary Key (`uuid`). |
-| `CollectionZoneId`| `Guid` | No | FK to `CollectionZone.Id` (Restrict delete). |
-| `Name` | `string` | No | Schedule title, e.g., "Tuesday Zone 1 Organic Collection" (`varchar(150)`). |
-| `ScheduledDate` | `DateTime` | No | Planned execution date/time (UTC). |
-| `Status` | `string` | No | Schedule status (`varchar(50)`). Default: `Draft`. |
-| `CreatedByUserId` | `Guid` | No | FK to `AppUser.Id` (WasteOfficer). |
-| `CreatedAt` | `DateTime` | No | UTC creation timestamp. |
-| `UpdatedAt` | `DateTime` | Yes | UTC timestamp of last update. |
+| `TaskCode` | `string` | No | Unique municipal operational task code, e.g., `TSK-20260921-0042` (`varchar(50)`). **Unique**. |
+| `WasteReportId` | `Guid` | Yes | FK to `WasteReports.Id` (Restrict delete). Non-null when task targets a citizen waste report. |
+| `WasteBinId` | `Guid` | Yes | FK to `WasteBins.Id` (Restrict delete). Non-null when task targets a roadside bin. |
+| `CollectionReason` | `string` | No | Operational reason justifying task creation (`varchar(50)`). Values: `VerifiedReport`, `FullOrBlockedBin`, `RoutineCollection`, `OfficerDiscretion`. |
+| `Status` | `string` | No | Lifecycle status (`varchar(50)`). Values: `Scheduled`, `Assigned`, `InProgress`, `Completed`, `Failed`, `Cancelled`. Default: `Scheduled`. |
+| `ScheduledAt` | `DateTime` | No | Planned target UTC timestamp when collection is scheduled to be performed (`timestamptz`). Must be >= creation time. |
+| `HandlingNotes` | `string` | Yes | Operational instructions for collection crew (e.g. access directions, hazard warnings) (`text`). Optional; must not substitute for `SchedulingReason`. |
+| `SchedulingReason` | `string` | Yes | Officer justification explaining the scheduling decision (`text`). Strictly mandatory (non-empty, 5–500 chars) when `CollectionReason = 'OfficerDiscretion'`. Distinct from operational `HandlingNotes`. |
+| `CreatedByUserId` | `Guid` | No | FK to `AppUsers.Id` (WasteOfficer who created task) (Restrict delete). Sourced from JWT; never client-supplied. |
+| `CreationMethod` | `string` | No | Method of creation (`varchar(30)`). Values: `Manual`, `ApprovedAiPlan`. Default: `Manual`. |
+| `TriggerObservationId` | `Guid` | Yes | Optional FK to `BinObservations.Id` (`SetNull` delete). Records the specific observation that triggered collection when `CollectionReason = 'FullOrBlockedBin'`. |
+| `RoutineDueDate` | `DateOnly` | Yes | Optional municipality local calendar date (`date`) recording which routine collection day triggered this task when `CollectionReason = 'RoutineCollection'`. |
+| `CreatedAt` | `DateTime` | No | Server-generated UTC creation timestamp (`timestamptz`). |
+| `UpdatedAt` | `DateTime` | Yes | UTC timestamp of last metadata update (`timestamptz`). |
 
-#### Schedule Status Values
-- `Draft`: Being assembled by officer.
-- `Planned`: Finalized and queued for task generation.
-- `Active`: Associated collection tasks are currently active.
-- `Completed`: All associated tasks finished.
-- `Cancelled`: Schedule called off.
+#### CollectionTask Database Constraints & Indexes
+- **Target XOR Check Constraint:** Exactly one target must be populated:
+  ```sql
+  CONSTRAINT "CK_CollectionTasks_Target_XOR" CHECK (
+      ("WasteReportId" IS NOT NULL AND "WasteBinId" IS NULL) OR
+      ("WasteReportId" IS NULL AND "WasteBinId" IS NOT NULL)
+  )
+  ```
+- **Reason-Target Consistency Check Constraint:**
+  ```sql
+  CONSTRAINT "CK_CollectionTasks_Reason_Consistency" CHECK (
+      ("WasteReportId" IS NOT NULL AND "CollectionReason" = 'VerifiedReport') OR
+      ("WasteBinId" IS NOT NULL AND "CollectionReason" IN ('FullOrBlockedBin', 'RoutineCollection', 'OfficerDiscretion'))
+  )
+  ```
+- **Officer Discretion Justification Check Constraint:**
+  ```sql
+  CONSTRAINT "CK_CollectionTasks_OfficerDiscretion_Reason" CHECK (
+      ("CollectionReason" != 'OfficerDiscretion') OR
+      ("SchedulingReason" IS NOT NULL AND LENGTH(TRIM("SchedulingReason")) > 0)
+  )
+  ```
+- **Status Enum Check Constraint:**
+  ```sql
+  CONSTRAINT "CK_CollectionTasks_Status" CHECK (
+      "Status" IN ('Scheduled', 'Assigned', 'InProgress', 'Completed', 'Failed', 'Cancelled')
+  )
+  ```
+- **Unique Code Index:** `IX_CollectionTasks_TaskCode` on `TaskCode` (Unique).
+- **Duplicate Active Task Filtered Unique Indexes:**
+  To guarantee that no more than ONE active collection task (`Scheduled`, `Assigned`, or `InProgress`) exists concurrently for the same target:
+  ```sql
+  CREATE UNIQUE INDEX "IX_CollectionTasks_WasteReportId_Active"
+  ON "CollectionTasks" ("WasteReportId")
+  WHERE "WasteReportId" IS NOT NULL AND "Status" IN ('Scheduled', 'Assigned', 'InProgress');
 
----
-
-### 4.4 `CollectionScheduleBin`
-Join entity linking waste bins included in a specific collection schedule.
-
-| Field | Type | Nullable | Description |
-| :--- | :--- | :--- | :--- |
-| `CollectionScheduleId` | `Guid` | No | PK & FK to `CollectionSchedule.Id` (Cascade delete). |
-| `WasteBinId` | `Guid` | No | PK & FK to `WasteBin.Id` (Restrict delete). |
-| `Sequence` | `int` | Yes | Planned pickup sequence index along the route. |
-
-*Composite Primary Key / Unique Constraint:* `(CollectionScheduleId, WasteBinId)`.
-
----
-
-### 4.5 `CollectionTask`
-Authoritative unit of work dispatched for collection. May originate from a verified ad-hoc `WasteReport` OR a scheduled zone routine `CollectionSchedule`.
-
-| Field | Type | Nullable | Description |
-| :--- | :--- | :--- | :--- |
-| `Id` | `Guid` | No | Primary Key (`uuid`). |
-| `WasteReportId` | `Guid` | Yes | FK to `WasteReport.Id` (Set null on report delete). |
-| `CollectionScheduleId` | `Guid` | Yes | FK to `CollectionSchedule.Id` (Set null on schedule delete). |
-| `Status` | `string` | No | Lifecycle status (`varchar(50)`). Default: `Pending`. |
-| `Priority` | `string` | No | Task priority (`Low`, `Medium`, `High`, `Urgent`). |
-| `ScheduledFor` | `DateTime` | Yes | Planned pickup window target (UTC). |
-| `CreatedAt` | `DateTime` | No | UTC creation timestamp. |
-| `UpdatedAt` | `DateTime` | Yes | UTC timestamp of last update. |
-
-#### Task Status Values
-- `Pending`: Created, awaiting driver and vehicle assignment.
-- `Assigned`: Assigned to driver/vehicle, awaiting execution.
-- `InProgress`: Driver has started pickup route.
-- `Completed`: All items collected and task finished.
-- `Cancelled`: Task abandoned or re-planned.
-
----
-
-### 4.6 `CollectionTaskItem`
-Individual waypoint or stop item comprising a collection task.
-
-| Field | Type | Nullable | Description |
-| :--- | :--- | :--- | :--- |
-| `Id` | `Guid` | No | Primary Key (`uuid`). |
-| `CollectionTaskId`| `Guid` | No | FK to `CollectionTask.Id` (Cascade delete). |
-| `WasteBinId` | `Guid` | Yes | FK to `WasteBin.Id` (if stop is a scheduled bin). |
-| `WasteReportId` | `Guid` | Yes | FK to `WasteReport.Id` (if stop is an ad-hoc report). |
-| `Sequence` | `int` | No | Ordering index of this item in the task. |
-| `CompletedAt` | `DateTime` | Yes | UTC timestamp when driver completed this item. |
-| `Notes` | `string` | Yes | Driver collection notes (`text`). |
-
-*Constraint:* Exactly one of `WasteBinId` or `WasteReportId` must be non-null for each item.
+  CREATE UNIQUE INDEX "IX_CollectionTasks_WasteBinId_Active"
+  ON "CollectionTasks" ("WasteBinId")
+  WHERE "WasteBinId" IS NOT NULL AND "Status" IN ('Scheduled', 'Assigned', 'InProgress');
+  ```
+- **Operational Query Indexes:**
+  - `IX_CollectionTasks_Status_ScheduledAt` on `(Status, ScheduledAt)`.
+  - `IX_CollectionTasks_CreatedByUserId` on `CreatedByUserId`.
 
 ---
 
-### 4.7 `CollectionTaskStatusHistory`
-Audit trail for task state changes.
+### 4.5 `CollectionTaskStatusHistory`
+Chronological audit record tracking every lifecycle status transition of a `CollectionTask`.
 
 | Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
 | `Id` | `Guid` | No | Primary Key (`uuid`). |
-| `CollectionTaskId`| `Guid` | No | FK to `CollectionTask.Id` (Cascade delete). |
-| `FromStatus` | `string` | Yes | Previous status (`null` for creation). |
+| `CollectionTaskId` | `Guid` | No | FK to `CollectionTasks.Id` (Cascade delete). |
+| `FromStatus` | `string` | Yes | Previous status (`varchar(50)`). Null for initial creation. |
 | `ToStatus` | `string` | No | New status (`varchar(50)`). |
-| `ChangedByUserId`| `Guid` | Yes | FK to `AppUser.Id` (Officer, Driver, or System). |
-| `Notes` | `string` | Yes | Remarks on status transition. |
-| `ChangedAt` | `DateTime` | No | UTC timestamp of change. |
+| `ChangedByUserId` | `Guid` | Yes | FK to `AppUsers.Id` (Restrict delete). User who triggered transition; null only for automated system events. |
+| `Notes` | `string` | Yes | Audit notes, cancellation reason, or failure details (`text`). |
+| `ChangedAt` | `DateTime` | No | Server-generated UTC timestamp of transition (`timestamptz`). |
+
+- **Atomic Status Change:** Every task status change (`Assigned`, `InProgress`, `Completed`, `Failed`, `Cancelled`) must insert a history record in the same database transaction.
+- **Index:** `IX_CollectionTaskStatusHistories_TaskId_ChangedAt` on `(CollectionTaskId, ChangedAt ASC)`.
+
+---
+
+### 4.6 `CollectionTaskScheduleHistory`
+Dedicated audit entity capturing changes to the planned execution time (`ScheduledAt`) of an unstarted (`Scheduled`) collection task.
+
+| Field | Type | Nullable | Description |
+| :--- | :--- | :--- | :--- |
+| `Id` | `Guid` | No | Primary Key (`uuid`). |
+| `CollectionTaskId` | `Guid` | No | FK to `CollectionTasks.Id` (Cascade delete). |
+| `PreviousScheduledAt`| `DateTime` | No | Prior planned UTC timestamp (`timestamptz`). |
+| `NewScheduledAt` | `DateTime` | No | Newly planned UTC timestamp (`timestamptz`). Must be > UtcNow. |
+| `Reason` | `string` | No | Mandatory officer explanation for rescheduling (5–500 chars) (`text`). |
+| `RescheduledByUserId`| `Guid` | No | FK to `AppUsers.Id` (WasteOfficer) (Restrict delete). |
+| `RescheduledAt` | `DateTime` | No | Server-generated UTC timestamp of rescheduling event (`timestamptz`). |
+
+- **Design Rationale:** Rescheduling an unstarted task does not alter its lifecycle state (`Scheduled` remains `Scheduled`). Recording the old time, new time, officer ID, and mandatory reason in a dedicated schedule history table guarantees complete auditability without polluting `CollectionTaskStatusHistory` with artificial `Scheduled → Scheduled` self-transitions.
+- **Precondition:** Rescheduling is permitted ONLY when `Status == Scheduled`. Once a task moves to `Assigned` or `InProgress`, rescheduling via C2 is rejected with `409 Conflict`.
+- **Index:** `IX_CollectionTaskScheduleHistories_TaskId_RescheduledAt` on `(CollectionTaskId, RescheduledAt ASC)`.
+
+---
+
+### 4.7 Collection Needs Read Model (Derived, Non-Persisted)
+`CollectionNeed` is a derived read model computed dynamically by ASP.NET Core from three eligible operational sources:
+
+```
+Source A: Verified Citizen WasteReports (Status == Verified, no active task)
+Source B: Active WasteBins with Latest Observation (100% Full OR Blocked, no active task)
+Source C: Active WasteBins Due for Routine Collection on Configured Weekdays (no active task)
+                                  │
+                                  ▼
+                Unified Collection Needs Queue
+                   (GET /api/v1/collection-needs)
+```
+
+#### Collection Need Item Projection (`CollectionNeedItemDto`)
+- `id`: Target ID (`WasteReportId` or `WasteBinId`).
+- `targetType`: `"Report"` or `"Bin"`.
+- `collectionReason`: `"VerifiedReport"`, `"FullOrBlockedBin"`, or `"RoutineCollection"`.
+- `title`: Short descriptive title (e.g. `BIN-COL-0042 (Full: 100%)` or `Verified Report: Pettah Market`).
+- `latitude`, `longitude`: Geospatial coordinates.
+- `addressText`: Location description.
+- `wasteType`: Primary or accepted waste categories.
+- `urgency`: Advisory priority indicator (`Urgent`, `High`, `Medium`, `Low`).
+- `triggerDate`: UTC timestamp when the need originated (verified date, observation date, or routine due date).
+- `attachmentCount`: File attachment count (for reports).
+- `latestObservation`: Summary of latest observation (for bins: fill level, condition, age in hours).
+
+#### Active Task Suppression Rule
+If a target already has an associated `CollectionTask` in status `Scheduled`, `Assigned`, or `InProgress`, it is **strictly excluded** from the collection needs queue. This prevents duplicate dispatch and visual clutter in the WasteOfficer operational dashboard.
+
+---
+
+### 4.8 Deterministic Routine Due Calculation Specification
+
+The determination of whether a registered bin is due for routine collection on a given date is computed by a deterministic domain algorithm operating in the municipality's configured local timezone (`Municipality:TimeZoneId = "Asia/Colombo"`):
+
+```
+Let localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, municipalityTimeZone)
+Let localToday = DateOnly.FromDateTime(localNow)
+Let localTodayWeekday = (int)localToday.DayOfWeek == 0 ? 7 : (int)localToday.DayOfWeek   // ISO 8601: 1=Mon .. 7=Sun
+```
+
+#### Algorithmic Invariants & Edge Cases:
+1. **Bin Has Never Been Collected (`LastCollectedAt == null`):**  
+   If `localTodayWeekday ∈ CollectionWeekdays`, the bin is due today. If today is not a configured weekday, but configured weekdays exist, the bin is outstanding for the earliest configured weekday following its `CreatedAt` local date.
+2. **Multiple Configured Weekdays (e.g. Monday and Thursday):**  
+   The bin becomes due on each configured weekday.
+3. **Missed Collection Day:**  
+   If a bin was due on Monday (e.g. Sept 15), but no task was scheduled or completed, on Tuesday (Sept 16) the bin **remains outstanding** with `RoutineDueDate = 2026-09-15` until a collection is completed.
+4. **Task Scheduled for a Later Day:**  
+   If a routine need arose on Monday, and an Officer manually schedules the task for Wednesday, the bin has an active task (`Status = Scheduled`). The active-task suppression rule removes the bin from the queue.
+5. **Active Task Spanning Another Routine Weekday:**  
+   If an active task created for Monday's routine run is still `Scheduled` or `InProgress` when Thursday arrives, the filtered unique index and suppression rule prevent creating a second task. The single existing active task covers the location.
+6. **Collection Completed After Due Date:**  
+   When a collection completes on Wednesday for a task originally due on Monday, C3 sets `LastCollectedAt = UtcNow`. For the remainder of Wednesday, the bin is NOT due. It will become due next on Thursday.
+7. **Weekday Configuration Changes:**  
+   If an officer updates `CollectionWeekdays` from `[1]` (Mon) to `[1, 4]` (Mon, Thu), the new schedule takes effect immediately based on `localToday` and `LastCollectedAt`.
+8. **Registration / Completion on a Configured Weekday:**  
+   If a bin is collected on Monday at 10:00 AM local time, `LastCollectedAt` reflects Monday. The routine calculation checks: has a collection occurred since the start of Monday local day? Since `LastCollectedAt >= localMondayStart`, the bin is NOT due again on Monday.
+9. **UTC vs Local Date Offset:**  
+   UTC 22:00 Sunday is 03:30 Monday in Colombo (UTC+5:30). The routine due check converts UTC now to Colombo time, correctly identifying Monday as the operative day.
+
+---
+
+### 4.9 Public Availability Derivation & Freshness State Machine
+
+Public roadside bins are queried by citizens to find usable disposal points. The public availability status is derived strictly on the server according to this frozen precedence hierarchy:
+
+```
+                   ┌────────────────────────────────────────┐
+                   │ WasteBin.AdministrativeStatus          │
+                   │ ∈ {OutOfService, Retired}?             │
+                   └───────────────────┬────────────────────┘
+                                       │ Yes ──> UNAVAILABLE
+                                       │ No
+                   ┌───────────────────▼────────────────────┐
+                   │ Latest BinObservation.Condition        │
+                   │ ∈ {Damaged, Blocked, Missing}?         │
+                   └───────────────────┬────────────────────┘
+                                       │ Yes ──> UNAVAILABLE
+                                       │ No
+                   ┌───────────────────▼────────────────────┐
+                   │ Observation is Missing OR              │
+                   │ (ServerUtcNow - RecordedAt) > 48h?     │
+                   └───────────────────┬────────────────────┘
+                                       │ Yes ──> UNKNOWN
+                                       │ No
+                   ┌───────────────────▼────────────────────┐
+                   │ Fresh Observation (Age <= 48h):        │
+                   │ FillLevelPercent == 100%?              │
+                   └───────────────────┬────────────────────┘
+                                       │ Yes ──> FULL (Unavailable)
+                                       │ No
+                   ┌───────────────────▼────────────────────┐
+                   │ Fresh Observation (Age <= 48h):        │
+                   │ FillLevelPercent == 75%?               │
+                   └───────────────────┬────────────────────┘
+                                       │ Yes ──> WARNING (Usable)
+                                       │ No
+                                       ▼
+                                     USABLE (Fill < 75%)
+```
+
+- **Inspection & Maintenance Alerts:** Bins with latest condition `Damaged` or `Missing` trigger an inspection alert on WasteOfficer and MunicipalManager operational views. They do NOT generate ordinary collection tasks.
+- **Stale Observation Integrity:** A stale 100% observation remains visible in internal history logs as an auditable historical measurement, but public citizen views display `Unknown` availability to avoid presenting outdated data as live fact.
+
+---
+
+### 4.10 C1 Lifecycle Synchronization & Atomic Transaction Contract
+
+Creating a collection task for a verified citizen waste report bridges Component 1 and Component 2:
+
+$$\text{WasteReport (Verified)} + \text{New CollectionTask (Scheduled)} \xrightarrow[\text{Transaction}]{\text{Atomic}} \begin{cases} \text{WasteReport.Status} = \text{Scheduled} \\ \text{WasteReportStatusHistory} \leftarrow (\text{Verified} \to \text{Scheduled}) \\ \text{CollectionTask} \leftarrow \text{Created (Scheduled)} \\ \text{CollectionTaskStatusHistory} \leftarrow (\text{null} \to \text{Scheduled}) \end{cases}$$
+
+#### Atomic Persistence Guarantees & C1 History Schema Integrity
+1. **Precondition Guard:** The report must be in `Status == WasteReportStatus.Verified`. Any other status returns `409 Conflict`.
+2. **Concurrency & Uniqueness:** If another officer or concurrent process attempts to schedule the same report, the partial unique index `IX_CollectionTasks_WasteReportId_Active` throws a uniqueness violation, returning `409 Conflict`.
+3. **Rollback Guarantee:** If updating the report status, inserting task history, or creating the task fails, the entire database transaction rolls back. No orphaned task and no unscheduled report state can persist.
+4. **No Generic Public Status PATCH:** WasteReport status cannot be changed to `Scheduled` via any public PATCH endpoint. It can only transition through the authoritative `POST /api/v1/collection-tasks/manual` endpoint.
+5. **Exact C1 Status History Entity Contract:**
+   - Appending to C1 status history uses the exact existing `WasteReportStatusHistory` domain entity and table:
+     - `WasteReportId = report.Id`
+     - `FromStatus = WasteReportStatus.Verified`
+     - `ToStatus = WasteReportStatus.Scheduled`
+     - `ChangedByUserId = actorUserId` (authenticated WasteOfficer ID; not `SubmittedByUserId`)
+     - `Notes = $"Collection task {task.TaskCode} scheduled"` (stored strictly in existing `Notes` property; not `Reason`)
+     - `ChangedAt = DateTime.UtcNow`
+   - C2 scheduling adheres strictly to the existing C1 schema (`ChangedByUserId`, `Notes`) and appends this audit record through an authorized application-service boundary (`SmartWaste.Application`). No new C1 properties or schema changes are introduced.
+
+---
+
+### 4.11 Terminal Outcomes & Failed Task Replacement Boundary
+
+- **Terminal Historical Task Statuses:**
+  - `Completed`: Work cleared and verified by C3. Terminal historical status.
+  - `Cancelled`: Task explicitly aborted prior to operational execution. Terminal historical status.
+  - `Failed`: Driver or crew encountered an insurmountable impediment (e.g. road blocked, inaccessible site, hazardous condition). Terminal historical audit record.
+
+#### Failed & Cancelled Task Rules:
+1. **Terminal Audit Immutability:**
+   - A `Failed` task is a permanent historical audit record. It must NEVER be changed to `Cancelled` merely to bypass unique indexes or enable replacement.
+2. **No Automatic State Reversion:**
+   - A task failure does NOT automatically resolve or reopen its linked `WasteReport`, and does NOT silently revert `WasteReport.Status` to `Verified`.
+3. **Report-Targeted Failed/Cancelled Tasks (Reserved Future C3/C1 Decision):**
+   - Initial manual report-task scheduling (`POST /api/v1/collection-tasks/manual`) strictly requires a report in status `Verified`.
+   - The existing C1 lifecycle has NO approved reverse transition from `Scheduled` or `InProgress` back to `Verified`. C2 does not invent reverse status transitions.
+   - Therefore, `POST /api/v1/collection-tasks/manual` CANNOT be used as an immediate replacement path for a report currently in `Scheduled` or `InProgress`.
+   - The operational mechanism for reopening a report, resolving failed collection attempts, or authorizing replacement work is explicitly a **RESERVED FUTURE C3/C1 INTEGRATION DECISION**.
+   - Unrestricted duplicate task creation for the same report is strictly prohibited by `IX_CollectionTasks_WasteReportId_Active` and the `Verified`-only status guard.
+4. **Bin-Targeted Failed Tasks (Unresolved Future Operation):**
+   - Explicit WasteOfficer review is a mandatory prerequisite before any replacement collection task may be authorized for a roadside bin.
+   - Because the approved C2 design does not yet define how that operational review is formally recorded and enforced (e.g., dedicated review acknowledgment entity or review gate), bin-task replacement following a failure is documented as an **UNRESOLVED FUTURE OPERATION**.
+   - The fact that `Failed` is excluded from the active-task unique index (`IX_CollectionTasks_WasteBinId_Active`) ensures database-level historical coexistence, but does NOT by itself constitute authorization for automatic or immediate task replacement.
+5. **No Dangerous Operational Task Cancellation in C2:**
+   - C2 does NOT expose an operational report-task cancellation endpoint that could leave a linked `WasteReport` stranded indefinitely in `Scheduled` status without an approved follow-up path.
+   - Task cancellation rules affecting linked waste reports are deferred to future C3/C1 integration.
 
 ---
 

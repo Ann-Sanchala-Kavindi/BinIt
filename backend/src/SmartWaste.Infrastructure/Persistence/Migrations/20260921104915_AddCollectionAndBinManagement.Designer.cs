@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using SmartWaste.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using SmartWaste.Infrastructure.Persistence;
 namespace SmartWaste.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260921104915_AddCollectionAndBinManagement")]
+    partial class AddCollectionAndBinManagement
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -419,8 +422,6 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_WasteBins_AdministrativeStatus", "\"AdministrativeStatus\" IN ('Active', 'OutOfService', 'Retired')");
 
                             t.HasCheckConstraint("CK_WasteBins_CapacityLiters", "\"CapacityLiters\" > 0");
-
-                            t.HasCheckConstraint("CK_WasteBins_CollectionWeekdays_Range", "\"CollectionWeekdays\" <@ ARRAY[1, 2, 3, 4, 5, 6, 7]");
 
                             t.HasCheckConstraint("CK_WasteBins_Coordinates", "\"Latitude\" >= -90.0 AND \"Latitude\" <= 90.0 AND \"Longitude\" >= -180.0 AND \"Longitude\" <= 180.0");
                         });

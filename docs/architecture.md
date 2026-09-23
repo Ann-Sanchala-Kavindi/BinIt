@@ -72,7 +72,7 @@ The application is decomposed into four cohesive business components, each match
 | Component | Scope & Mission | Primary Actor | Primary Client |
 | :--- | :--- | :--- | :--- |
 | **1. Waste Reporting & Citizen Management** | Citizen waste issue reporting, photo uploads, officer field verification, and citizen engagement. | **Citizen** (Public)<br>**WasteOfficer** (Field) | **Flutter** (Citizen)<br>**React** (Officer) |
-| **2. Waste Collection & Bin Management** | Bin registry, zone division, fill-level monitoring, routine schedule generation, and collection task assembly. | **WasteOfficer** | **React** |
+| **2. Waste Collection & Bin Management** | Public roadside bin registry, accepted waste streams, manual observation tracking (discrete 0–100% fill levels & physical condition), derived collection needs queue (Sources A, B, C), and atomic collection task scheduling. | **WasteOfficer** (Management)<br>**Citizen** (Discovery) | **React** (Officer)<br>**Flutter** (Citizen) |
 | **3. Fleet, Driver & Route Management** | Collection vehicle inventory, driver duty tracking, vehicle/driver dispatch assignment, route optimization, and waypoint execution. | **Driver**<br>**WasteOfficer** | **Flutter** (Driver)<br>**React** (Officer) |
 | **4. Operations, Complaints & Analytics** | Citizen grievances, operational field incidents, notifications, multi-agent AI approval workflows, and executive analytics. | **MunicipalManager**<br>**Citizen** | **React** (Manager)<br>**Flutter** (Citizen) |
 
@@ -96,12 +96,15 @@ public static class AppRoles
 1. **`Citizen`**:
    - Registers publicly via `/api/v1/auth/register` (strictly restricted to `Citizen` role).
    - Submits and tracks own `WasteReport` records.
+   - Discovers nearby public roadside bins, inspects accepted waste streams and public availability, and requests external directions.
    - Files and monitors own `Complaint` records.
-   - Cannot verify reports, dispatch tasks, view other citizens' records, or approve AI workflows.
+   - Cannot verify reports, register or modify bins, record bin observations, dispatch/reschedule tasks, view other citizens' records, or approve AI workflows.
 2. **`WasteOfficer`**:
    - Verifies or rejects citizen waste reports.
-   - Manages smart bin records and collection zones.
-   - Creates and manages collection schedules and dispatches tasks.
+   - Manages municipal roadside bin registry (registration, operational metadata updates, deactivation).
+   - Records manual field bin observations (fill levels and physical condition).
+   - Reviews the unified municipal collection needs queue (Sources A, B, and C with active task suppression).
+   - Dispatches single-location collection tasks manually and reschedules unstarted collection tasks.
    - Initiates AI planning workflows.
 3. **`Driver`**:
    - Manages personal duty availability (`Available`, `OffDuty`).
@@ -304,8 +307,11 @@ To ensure distinct individual academic contributions while maintaining architect
      - *Exact Coverage Rule:* Produces exactly one analysis per verified report returned by the tool.
    - **Planner Delegation:** Shared Planner Agent will delegate objectives to this specialized agent in multi-agent workflows.
 3. **Collection Planning Agent (Student 2 — Component 2)**:
-   - Aggregates verified reports with scheduled zone bins.
-   - Evaluates bin fill-level urgency and identifies required stops.
+   - **Responsibility:** Evaluates municipal collection needs (derived from Verified waste reports, full/overflowing roadside bins, and routine collection schedules) and proposes non-authoritative collection route/batch candidates.
+   - **Allowed Tools:** Strictly allow-listed `get_collection_needs` tool (retrieving candidate needs via ASP.NET Core internal authenticated endpoint `GET /api/v1/internal/ai-tools/collection-needs`). Zero direct PostgreSQL access.
+   - **Advisory Recommendation Semantics:** Proposes candidate task groups and collection priority sequences for downstream fleet allocation and routing; never authoritatively creates `CollectionTask` records or updates database statuses directly.
+   - **Safety Boundaries:** Respects active task suppression, administrative bin availability, and deterministic weekday schedules.
+   - **Planner Delegation:** Shared Planner Agent will delegate collection needs evaluation to this specialized agent in multi-agent workflows.
 4. **Fleet & Route Agent (Student 3 — Component 3)**:
    - Evaluates available vehicles matching required capacity and waste type.
    - Performs route planning/optimization for waypoints to minimize travel time.
@@ -326,15 +332,20 @@ The integration of generative and agentic AI is bounded by strict software engin
 2. **Deterministic Rules Override AI Suggestions**:
    - Every proposal undergoes strict programmatic validation in ASP.NET Core before reaching a human manager.
    - If any deterministic rule fails, the proposal is rejected or returned for revision:
-     - `WasteReport.Status` must be `Verified` before scheduling.
-     - `WasteBin.Status` must be `Active`.
-     - No duplicate active `CollectionTask` for the same location/schedule.
+     - `WasteReport.Status` must be `Verified` before scheduling (`WasteReport` transitions atomically from `Verified` to `Scheduled`; C1 audit trail appended using existing `ChangedByUserId` and `Notes` properties).
+     - `WasteBin.AdministrativeStatus` must be `Active`.
+     - Single-target XOR constraint: each `CollectionTask` targets strictly EITHER a `WasteReport` OR a `WasteBin`.
+     - Reason consistency: Report tasks require `VerifiedReport` reason; `OfficerDiscretion` is permitted strictly for `WasteBin` targets and mandates a non-empty `SchedulingReason` (distinct from optional operational `HandlingNotes`).
+     - No duplicate active `CollectionTask` for the same target (enforced via partial unique indexes on active statuses `Scheduled`, `Assigned`, `InProgress`).
      - Selected `Driver` must be in `Available` status.
      - Selected `Vehicle` must be in `Available` status.
      - No overlapping active `CollectionAssignment` for the selected driver or vehicle.
      - Total estimated load must not exceed vehicle load capacity.
+     - Terminal task immutability: `Completed`, `Cancelled`, and `Failed` are terminal historical records. `Failed` tasks never revert or resolve linked reports and cannot be mutated to `Cancelled`.
+     - Replacement boundaries: Report-task reopening and replacement following failure or cancellation is a reserved future C3/C1 integration decision (no reverse status transitions exist). Bin-targeted replacement following failure requires explicit WasteOfficer review (unresolved future operation). No operational report-task cancellation endpoint is exposed in C2.
 3. **Human-in-the-Loop (HITL) for High-Impact Actions**:
-   - No vehicle is dispatched, no task is generated, and no assignment is created without explicit `MunicipalManager` approval in the React web app (`POST /api/v1/ai/workflows/{id}/decision`).
+   - High-impact AI recommendations (automated batch collection dispatch, vehicle route generation) require explicit `MunicipalManager` approval in the React web app (`POST /api/v1/ai/workflows/{id}/decision`) before database commit.
+   - Deterministic manual operational scheduling: `WasteOfficer` can create single-target collection tasks directly (`POST /api/v1/collection-tasks/manual`) and reschedule unstarted tasks (`POST /api/v1/collection-tasks/{id}/reschedule`) without AI workflow involvement.
 4. **Transparent, Auditable Workflow History**:
    - All workflow steps (`AiWorkflowStep`) and tool calls (`AiToolCall`) are persistently logged with inputs and outputs in PostgreSQL.
    - **No Hidden Chain-of-Thought Storage**: Internal reasoning traces or raw thoughts are never stored in the database. Only auditable, structured actions, parameters, summaries, and outcomes are persisted.
