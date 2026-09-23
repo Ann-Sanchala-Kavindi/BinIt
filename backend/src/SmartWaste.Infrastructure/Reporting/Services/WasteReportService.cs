@@ -418,8 +418,11 @@ public sealed class WasteReportService : IWasteReportService
     // VERIFY
     // ──────────────────────────────────────────────────────────────────────────
 
+    public Task<WasteReportDetailDto> VerifyAsync(Guid reportId, Guid actorUserId, string actorRole, CancellationToken cancellationToken = default) => VerifyAsync(reportId, new VerifyWasteReportRequest { Priority = WasteReportPriority.High }, actorUserId, actorRole, cancellationToken);
+
     public async Task<WasteReportDetailDto> VerifyAsync(
         Guid reportId,
+        VerifyWasteReportRequest request,
         Guid actorUserId,
         string actorRole,
         CancellationToken cancellationToken = default)
@@ -445,6 +448,7 @@ public sealed class WasteReportService : IWasteReportService
 
         var now = DateTime.UtcNow;
 
+        report.Priority = request.Priority!.Value;
         report.Status = WasteReportStatus.Verified;
         report.VerifiedByUserId = actorUserId;
         report.VerifiedAt = now;

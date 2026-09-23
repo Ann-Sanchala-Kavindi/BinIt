@@ -22,6 +22,7 @@ export type WasteReportStatus =
   | 'Cancelled';
 
 export type WasteReportPriority = 'Low' | 'Medium' | 'High' | 'Urgent';
+export interface VerifyWasteReportRequest { priority: WasteReportPriority; }
 
 /**
  * Summary DTO returned by GET /api/v1/waste-reports (WasteReportSummaryDto)

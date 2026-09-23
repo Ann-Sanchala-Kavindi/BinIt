@@ -206,6 +206,7 @@ public class WasteReportsController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Verify(
         [FromRoute] Guid id,
+        [FromBody] VerifyWasteReportRequest request,
         CancellationToken cancellationToken)
     {
         if (!TryGetActor(out var actorUserId, out var actorRole, out var errorResult))
@@ -213,7 +214,7 @@ public class WasteReportsController : ControllerBase
             return errorResult!;
         }
 
-        var report = await _wasteReportService.VerifyAsync(id, actorUserId, actorRole, cancellationToken);
+        var report = await _wasteReportService.VerifyAsync(id, request, actorUserId, actorRole, cancellationToken);
         return Ok(report);
     }
 

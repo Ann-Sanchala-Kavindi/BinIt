@@ -128,14 +128,14 @@ export const WasteReportDetailPage: React.FC = () => {
     }
   };
 
-  const handleConfirmVerify = async () => {
+  const handleConfirmVerify = async (priority: import('../types/reporting').WasteReportPriority) => {
     if (!report || isMutating) return;
 
     setIsMutating(true);
     setActionFeedback(null);
 
     try {
-      await reportingApi.verifyReport(report.id);
+      await reportingApi.verifyReport(report.id, priority);
       setIsVerifyModalOpen(false);
       setActionFeedback({
         type: 'success',

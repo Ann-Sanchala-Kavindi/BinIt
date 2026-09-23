@@ -203,9 +203,9 @@ describe('reportingApi', () => {
     };
     (axiosClient.post as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: mockVerifiedDetail });
 
-    const result = await reportingApi.verifyReport('report-123');
+    const result = await reportingApi.verifyReport('report-123', 'High');
 
-    expect(axiosClient.post).toHaveBeenCalledWith('/waste-reports/report-123/verify');
+    expect(axiosClient.post).toHaveBeenCalledWith('/waste-reports/report-123/verify', { priority: 'High' });
     expect(result).toEqual(mockVerifiedDetail);
     expect(result.status).toBe('Verified');
     expect(result.verifiedByUserName).toBe('Officer Perera');

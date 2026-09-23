@@ -97,6 +97,7 @@ public interface IWasteReportService
     /// <exception cref="SmartWaste.Application.Common.Exceptions.BusinessRuleConflictException">Report not in UnderReview status.</exception>
     Task<WasteReportDetailDto> VerifyAsync(
         Guid reportId,
+        VerifyWasteReportRequest request,
         Guid actorUserId,
         string actorRole,
         CancellationToken cancellationToken = default);
