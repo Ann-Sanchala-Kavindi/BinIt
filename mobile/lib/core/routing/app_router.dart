@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../features/auth/presentation/change_password_screen.dart';
 import '../../features/auth/presentation/home_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
@@ -9,6 +10,9 @@ import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/citizen/presentation/citizen_dashboard_screen.dart';
 import '../../features/citizen/presentation/citizen_placeholder_screen.dart';
+import '../../features/bins/data/public_waste_bins_repository.dart';
+import '../../features/bins/presentation/bin_details_screen.dart';
+import '../../features/bins/presentation/find_bins_screen.dart';
 import '../../features/driver/presentation/driver_dashboard_screen.dart';
 import '../../features/driver/presentation/driver_placeholder_screen.dart';
 import '../../features/reporting/data/reporting_repository.dart';
@@ -25,12 +29,9 @@ class AuthRouterListenable extends ChangeNotifier {
   final Ref _ref;
 
   AuthRouterListenable(this._ref) {
-    _ref.listen<AuthState>(
-      authProvider,
-      (previous, next) {
-        notifyListeners();
-      },
-    );
+    _ref.listen<AuthState>(authProvider, (previous, next) {
+      notifyListeners();
+    });
   }
 }
 
@@ -49,18 +50,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/splash',
         builder: (context, state) => const SplashScreen(),
       ),
-      GoRoute(
-        path: '/login',
-        builder: (context, state) => const LoginScreen(),
-      ),
+      GoRoute(path: '/login', builder: (context, state) => const LoginScreen()),
       GoRoute(
         path: '/register',
         builder: (context, state) => const RegisterScreen(),
       ),
-      GoRoute(
-        path: '/home',
-        builder: (context, state) => const HomeScreen(),
-      ),
+      GoRoute(path: '/home', builder: (context, state) => const HomeScreen()),
       GoRoute(
         path: '/change-password',
         builder: (context, state) => const ChangePasswordScreen(),
@@ -127,7 +122,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             path: '/citizen/profile',
             builder: (context, state) => const CitizenPlaceholderScreen(
               title: 'Citizen Profile',
-              description: 'Manage your personal account and contact information.',
+              description:
+                  'Manage your personal account and contact information.',
               icon: Icons.person_outline,
             ),
           ),
@@ -173,18 +169,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/citizen/notifications',
         builder: (context, state) => const CitizenPlaceholderScreen(
           title: 'Notifications',
-          description: 'Status updates and municipal alerts will be available here.',
+          description:
+              'Status updates and municipal alerts will be available here.',
           icon: Icons.notifications_outlined,
           hasScaffold: true,
         ),
       ),
       GoRoute(
         path: '/citizen/nearby-bins',
-        builder: (context, state) => const CitizenPlaceholderScreen(
-          title: 'Nearby Bins',
-          description: 'Find waste bins near your location.',
-          icon: Icons.delete_outline,
-          hasScaffold: true,
+        builder: (context, state) => FindBinsScreen(
+          repository: ref.watch(publicWasteBinsRepositoryProvider),
+        ),
+      ),
+      GoRoute(
+        path: '/citizen/nearby-bins/:id',
+        builder: (context, state) => BinDetailsScreen(
+          binId: state.pathParameters['id']!,
+          repository: ref.watch(publicWasteBinsRepositoryProvider),
         ),
       ),
 
@@ -327,7 +328,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         return '/login';
       }
 
-      final defaultRoleRoute = isCitizen ? '/citizen/dashboard' : '/driver/dashboard';
+      final defaultRoleRoute = isCitizen
+          ? '/citizen/dashboard'
+          : '/driver/dashboard';
 
       // 5. If authenticated and on login, register, splash, or root, redirect to role destination
       if (isAuthRoute || isSplash || location == '/') {
