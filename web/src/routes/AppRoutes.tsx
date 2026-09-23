@@ -22,6 +22,12 @@ import { managerNavItems } from '../components/layout/navConfig';
 import { ComingSoonPage } from '../pages/ComingSoonPage';
 import { WasteReportsPage } from '../features/reporting/pages/WasteReportsPage';
 import { WasteReportDetailPage } from '../features/reporting/pages/WasteReportDetailPage';
+import { BinsPage } from '../features/collection/pages/BinsPage';
+import { BinDetailPage } from '../features/collection/pages/BinDetailPage';
+import { EditBinPage, RegisterBinPage } from '../features/collection/pages/BinFormPages';
+import { RecordBinObservationPage } from '../features/collection/pages/RecordBinObservationPage';
+import { CollectionNeedsPage } from '../features/collection/pages/CollectionNeedsPage';
+import { CollectionTaskEnhancedDetailPage, CollectionTasksPage } from '../features/collection/pages/CollectionTasksPages';
 
 /**
  * Renders auth pages or redirects already-authenticated users to their role default dashboard.
@@ -107,36 +113,14 @@ export const AppRoutes: React.FC = () => {
             <Route path="/officer/waste-reports/:id" element={<WasteReportDetailPage />} />
             <Route path="/officer/reports" element={<Navigate to="/officer/waste-reports" replace />} />
             <Route path="/officer/reports/:id" element={<WasteReportDetailPage />} />
-            <Route
-              path="/officer/bins"
-              element={
-                <ComingSoonPage
-                  title="Bin Management"
-                  description="Manage waste bins, locations, and operational status. This module is currently under development."
-                  backTo="/officer/dashboard"
-                />
-              }
-            />
-            <Route
-              path="/officer/schedules"
-              element={
-                <ComingSoonPage
-                  title="Collection Schedules"
-                  description="Create and manage scheduled waste collections. This module is currently under development."
-                  backTo="/officer/dashboard"
-                />
-              }
-            />
-            <Route
-              path="/officer/tasks"
-              element={
-                <ComingSoonPage
-                  title="Collection Tasks"
-                  description="Track and manage operational collection tasks. This module is currently under development."
-                  backTo="/officer/dashboard"
-                />
-              }
-            />
+            <Route path="/officer/bins" element={<BinsPage />} />
+            <Route path="/officer/bins/register" element={<RegisterBinPage />} />
+            <Route path="/officer/bins/:id/observations/new" element={<RecordBinObservationPage />} />
+            <Route path="/officer/bins/:id" element={<BinDetailPage />} />
+            <Route path="/officer/bins/:id/edit" element={<EditBinPage />} />
+            <Route path="/officer/schedules" element={<CollectionNeedsPage />} />
+            <Route path="/officer/tasks" element={<CollectionTasksPage />} />
+            <Route path="/officer/tasks/:id" element={<CollectionTaskEnhancedDetailPage />} />
             <Route
               path="/officer/complaints"
               element={
@@ -161,6 +145,8 @@ export const AppRoutes: React.FC = () => {
             <Route path="/manager/waste-reports" element={<Navigate to="/manager/reports" replace />} />
             <Route path="/manager/waste-reports/:id" element={<WasteReportDetailPage />} />
             <Route path="/manager/users" element={<UserManagementPage />} />
+            <Route path="/manager/tasks" element={<CollectionTasksPage />} />
+            <Route path="/manager/tasks/:id" element={<CollectionTaskEnhancedDetailPage />} />
             <Route
               path="/manager/ai-approvals"
               element={
