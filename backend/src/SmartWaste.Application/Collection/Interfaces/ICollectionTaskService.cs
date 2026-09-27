@@ -21,6 +21,13 @@ public interface ICollectionTaskService
         string actorRole,
         CancellationToken cancellationToken = default);
 
+    Task<CollectionTaskDetailDto> CreateReplacementTaskAsync(
+        Guid failedTaskId,
+        CreateReplacementCollectionTaskRequest request,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Retrieves detailed collection task information including target details and histories.
     /// Accessible by WasteOfficer and MunicipalManager.

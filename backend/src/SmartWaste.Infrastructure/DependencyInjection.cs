@@ -3,11 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartWaste.Application.Collection.Interfaces;
+using SmartWaste.Application.Fleet.Interfaces;
 using SmartWaste.Application.Common.Options;
 using SmartWaste.Application.Interfaces;
 using SmartWaste.Application.Reporting.Interfaces;
 using SmartWaste.Domain.Entities;
 using SmartWaste.Infrastructure.Collection.Services;
+using SmartWaste.Infrastructure.Fleet.Services;
 using SmartWaste.Infrastructure.Persistence;
 using SmartWaste.Infrastructure.Reporting.Services;
 using SmartWaste.Infrastructure.Services;
@@ -68,6 +70,13 @@ public static class DependencyInjection
         services.AddScoped<IBinObservationService, BinObservationService>();
         services.AddScoped<ICollectionNeedService, CollectionNeedService>();
         services.AddScoped<ICollectionTaskService, CollectionTaskService>();
+
+        // Component 3 — Driver and vehicle application services
+        services.AddScoped<IDriverProfileService, DriverProfileService>();
+        services.AddScoped<IVehicleService, VehicleService>();
+        services.AddScoped<IAssignmentReadService, AssignmentReadService>();
+        services.AddScoped<ICollectionAssignmentService, CollectionAssignmentService>();
+        services.AddScoped<IFleetPlanningAiService, FleetPlanningAiService>();
 
         // Cloud Storage — Supabase Storage
         var storageSection = configuration.GetSection(SmartWaste.Infrastructure.Reporting.Storage.SupabaseStorageOptions.SectionName);

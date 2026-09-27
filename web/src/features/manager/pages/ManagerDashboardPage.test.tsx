@@ -413,38 +413,7 @@ describe('MunicipalManager Dashboard', () => {
     expect(backButton).toHaveAttribute('href', '/manager/dashboard');
   });
 
-  it('navigates back to /manager/dashboard when clicking Back to Dashboard without 403 /unauthorized error', async () => {
-    const user = userEvent.setup();
-    useAuthStore.setState({
-      isAuthenticated: true,
-      isLoading: false,
-      accessToken: 'token-manager',
-      user: {
-        id: 'manager-1',
-        fullName: 'Kavindi Silva',
-        email: 'manager@smartwaste.local',
-        role: 'MunicipalManager',
-      },
-    });
-
-    render(
-      <MemoryRouter initialEntries={['/manager/fleet']}>
-        <AppRoutes />
-      </MemoryRouter>
-    );
-
-    // Click "Back to Dashboard"
-    const backButton = screen.getByRole('link', { name: /back to dashboard/i });
-    await user.click(backButton);
-
-    // Directly renders Municipal Manager Dashboard and NOT Access Denied
-    expect(await screen.findByText(/welcome back,/i)).toBeInTheDocument();
-    const headings = await screen.findAllByRole('heading', { name: /municipal manager dashboard/i });
-    expect(headings.length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText('Access Denied')).not.toBeInTheDocument();
-  });
-
-  it('ensures all 5 manager placeholder subroutes link back to /manager/dashboard', () => {
+  it('ensures all remaining manager placeholder subroutes link back to /manager/dashboard', () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -459,7 +428,6 @@ describe('MunicipalManager Dashboard', () => {
 
     const managerSubroutes = [
       '/manager/ai-approvals',
-      '/manager/fleet',
       '/manager/operations',
       '/manager/analytics',
       '/manager/audit',

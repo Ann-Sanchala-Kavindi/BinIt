@@ -55,11 +55,11 @@ All error responses return standard `ProblemDetails`:
   "type": "https://tools.ietf.org/html/rfc7231#section-6.5.1",
   "title": "Bad Request",
   "status": 400,
-  "detail": "License number already registered.",
-  "instance": "/api/v1/drivers",
+  "detail": "A vehicle with this registration number already exists.",
+  "instance": "/api/v1/vehicles",
   "errors": {
-    "licenseNumber": [
-      "The license number must be unique."
+    "registrationNumber": [
+      "The registration number must be unique."
     ]
   }
 }
@@ -1105,8 +1105,7 @@ Authoritative manual task scheduling command executed by a WasteOfficer.
 - **Failed & Replacement Task Boundaries:**
   - Initial scheduling requires `WasteReport.Status == Verified`.
   - This endpoint CANNOT be used to re-schedule or replace a task for a report currently in `Scheduled` or `InProgress`.
-  - Reopening and replacement-task scheduling for failed or cancelled report-targeted tasks is a **RESERVED FUTURE C3/C1 INTEGRATION DECISION**; C2 introduces no reverse `WasteReport` status transitions.
-  - Bin-targeted failed task replacement requires explicit WasteOfficer review, which is an **UNRESOLVED FUTURE OPERATION** (mechanism to formally persist and enforce this review is deferred).
+  - Replacement after a terminal Failed task is deliberately a distinct planned C3 command: `POST /api/v1/collection-tasks/{failedTaskId}/replacement` (Section 5.5). It has separate actor, history, active-claim, continuing-need, and report-transition preconditions; it does not weaken this initial-scheduling endpoint.
   - No operational report-task cancellation endpoint is exposed in C2 to prevent leaving linked reports stranded in `Scheduled`.
 - **Response `201 Created`:** `CollectionTaskDetailDto` with `Location` header.
 - **Error Responses:**
@@ -1176,123 +1175,96 @@ Retrieves the complete audit trail of status transitions and reschedule events f
 
 ## 5. Component 3 — Fleet, Driver & Route Management
 
-### 5.1 Vehicles Endpoints
+> **Contract status:** All Component 3 endpoints below are `[Planned]`. They extend the existing C1/C2 services; none creates a second task registry or a client-authoritative status API. JSON uses camelCase, enum values are strings, lists use the existing `PagedResult` envelope, and errors use the established RFC 7807/validation shape.
 
-#### `GET /api/v1/vehicles` `[Planned]`
-Lists fleet vehicles with status, type, and availability filters.
-- **Access:** `WasteOfficer`, `MunicipalManager`, `Driver`.
-- **Response `200 OK`:** `PagedResult<VehicleDto>`.
+### 5.1 Vehicle registry `[Planned]`
 
-#### `GET /api/v1/vehicles/{id}` `[Planned]`
-Vehicle details, load capacity, and active assignment.
+| Endpoint | Access | Contract |
+| :--- | :--- | :--- |
+| `GET /api/v1/vehicles` | `MunicipalManager`, `WasteOfficer` | Paged fleet list with `operationalStatus`, `vehicleType`, `supportedWasteTypes`, and derived `isOccupied`; no Driver access to unrelated fleet records. |
+| `GET /api/v1/vehicles/{id:guid}` | `MunicipalManager`, `WasteOfficer` | Vehicle detail including `capacityLiters`, notes, supported waste types, and derived current assignment reference when occupied. |
+| `POST /api/v1/vehicles` | `MunicipalManager` | Registers a vehicle. Request: `registrationNumber` (1–50, unique), `vehicleType` (`Compactor`, `Flatbed`, `Tipper`, `SmallVan`), `capacityLiters` (positive), `supportedWasteTypes` (unique existing waste-type enum values), optional `notes` (max 1000). Returns `201`. |
+| `PATCH /api/v1/vehicles/{id:guid}` | `MunicipalManager` | Updates registered administrative data, capacity, compatibility, or notes. `registrationNumber` remains unique. Returns `200`. |
+| `PATCH /api/v1/vehicles/{id:guid}/operational-status` | `MunicipalManager` | Request: `operationalStatus` (`Available`, `Maintenance`, `Inactive`). Occupancy is derived and cannot be manually set. Returns `200`; returns `409` if a change would make an unfinished assignment invalid. |
+
+### 5.2 Driver account and availability `[Planned]`
+
+Existing `POST /api/v1/users` remains the sole way a MunicipalManager provisions a Driver Identity account. When the `Driver` role is assigned, C3 automatically and idempotently creates the internal availability profile; it never accepts a password, licence, or creates a parallel identity.
+
+| Endpoint | Access | Contract |
+| :--- | :--- | :--- |
+| `GET /api/v1/drivers` | `MunicipalManager`, `WasteOfficer` | Paged Driver-role account list: opaque AppUser ID, display name, Driver-controlled `availabilityStatus`, and derived `isOccupied`. It excludes historical licence/eligibility data and contact data. |
+| `GET /api/v1/drivers/{id:guid}` | `MunicipalManager`; `Driver` self | Simplified Driver operational details: AppUser ID, display name, availability, and derived occupancy. Returns `404` for a non-Driver account or missing internal profile. |
+| `PATCH /api/v1/drivers/me/availability` | `Driver` | Request: `availabilityStatus` (`Available`, `OffDuty`). Actor is derived solely from JWT. Availability never releases task, Driver, or Vehicle claims; an already assigned Driver may continue the assignment lifecycle after becoming `OffDuty`. |
+
+### 5.3 Assignment planning and manual ordering `[Planned]`
+
+#### `GET /api/v1/collection-tasks/available-for-assignment`
 - **Access:** `WasteOfficer`, `MunicipalManager`.
-- **Response `200 OK`:** `VehicleDetailDto`.
+- Returns only existing tasks in `Scheduled` status with no active assignment claim. Supports existing task-list filters and pagination; it does not create needs or recompute C2 eligibility.
 
-#### `POST /api/v1/vehicles` `[Planned]`
-Registers a new vehicle in the municipal fleet.
-- **Access:** `WasteOfficer`, `MunicipalManager`.
-- **Request Body:** `registrationNumber`, `vehicleType`, `capacity`.
-- **Response `201 Created`:** `VehicleDto`.
-
-#### `PATCH /api/v1/vehicles/{id}/status` `[Planned]`
-Updates vehicle operational status (`Available`, `Maintenance`, `Inactive`).
-- **Access:** `WasteOfficer`, `MunicipalManager`.
-- **Response `200 OK`:** Updated `VehicleDto`.
-
----
-
-### 5.2 Drivers Endpoints
-
-#### `GET /api/v1/drivers` `[Planned]`
-Lists municipal drivers and current availability status.
-- **Access:** `WasteOfficer`, `MunicipalManager`.
-- **Response `200 OK`:** `PagedResult<DriverSummaryDto>`.
-
-#### `GET /api/v1/drivers/{id}` `[Planned]`
-Retrieves driver profile, license details, and active assignment.
-- **Access:** `WasteOfficer`, `MunicipalManager`, `Driver` (Self).
-- **Response `200 OK`:** `DriverProfileDto`.
-
-#### `PATCH /api/v1/drivers/{id}/availability` `[Planned]`
-Toggles availability status (`Available`, `OffDuty`).
-- **Access:** `Driver` (Self only), `WasteOfficer`.
-- **Request Body:** `{"availabilityStatus": "Available"}`
-- **Response `200 OK`:** Updated `DriverProfileDto`.
-
----
-
-### 5.3 Collection Assignments Endpoints
-
-#### `POST /api/v1/assignments` `[Planned]`
-**Non-trivial business operation:** Binds a `CollectionTask`, a qualified `Driver`, and a suitable `Vehicle`. Performs strict deterministic validation preventing overlapping assignments for driver or vehicle.
-- **Access:** `WasteOfficer`, `MunicipalManager`.
-- **Request Body:**
+#### `POST /api/v1/assignments`
+- **Access:** `WasteOfficer`.
+- **Request:**
 ```json
 {
-  "collectionTaskId": "d3b07384-d113-4f44-8cc0-f3a763886561",
   "driverId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "vehicleId": "f9e8d7c6-b5a4-3210-fedc-ba0987654321"
-}
-```
-- **Response `201 Created`:** `CollectionAssignmentDto`.
-
-#### `GET /api/v1/assignments` `[Planned]`
-Lists assignments. Drivers only see their own assignments; Officers/Managers see all.
-- **Access:** `Driver`, `WasteOfficer`, `MunicipalManager`.
-- **Response `200 OK`:** `PagedResult<CollectionAssignmentDto>`.
-
-#### `GET /api/v1/assignments/{id}` `[Planned]`
-Detailed assignment view including associated task items and route.
-- **Access:** `Driver` (Assignee), `WasteOfficer`, `MunicipalManager`.
-- **Response `200 OK`:** `CollectionAssignmentDetailDto`.
-
-#### `POST /api/v1/assignments/{id}/accept` `[Planned]`
-Driver accepts the assigned task via mobile application.
-- **Access:** `Driver` (Assignee).
-- **Response `200 OK`:** Updated assignment (`status: "Accepted"`).
-
-#### `POST /api/v1/assignments/{id}/start` `[Planned]`
-Driver starts navigation and collection.
-- **Access:** `Driver` (Assignee).
-- **Response `200 OK`:** Updated assignment (`status: "InProgress"`).
-
-#### `POST /api/v1/assignments/{id}/complete` `[Planned]`
-Driver marks collection duty completed.
-- **Access:** `Driver` (Assignee).
-- **Response `200 OK`:** Updated assignment (`status: "Completed"`).
-
----
-
-### 5.4 Routes Endpoints
-
-#### `GET /api/v1/routes/{id}` `[Planned]`
-Retrieves calculated route geometry and ordered stops.
-- **Access:** `Driver`, `WasteOfficer`, `MunicipalManager`.
-- **Response `200 OK`:**
-```json
-{
-  "id": "e4b1a2c3-d4e5-6789-0123-abcdef456789",
-  "estimatedDistance": 14250.0,
-  "estimatedDuration": 3200.0,
-  "status": "Active",
+  "vehicleId": "f9e8d7c6-b5a4-3210-fedc-ba0987654321",
   "stops": [
-    {
-      "id": "11111111-2222-3333-4444-555555555555",
-      "sequence": 1,
-      "latitude": 6.9271,
-      "longitude": 79.8612,
-      "status": "Completed"
-    }
-  ]
+    { "collectionTaskId": "d3b07384-d113-4f44-8cc0-f3a763886561", "sequence": 1 },
+    { "collectionTaskId": "e3b07384-d113-4f44-8cc0-f3a763886562", "sequence": 2 }
+  ],
+  "compatibilityAcknowledgement": "Accepted handling uncertainty after reviewing the available task data."
 }
 ```
-*(Note: External routing engine credentials remain completely confidential and are never exposed).*
+- **Validation:** one or more unique task IDs; positive contiguous unique stop sequences; each task is existing, `Scheduled`, and unclaimed; selected AppUser has the `Driver` role with an internal availability profile, is `Available`, and is unoccupied; Vehicle is operationally `Available` and unoccupied. Known waste incompatibility returns `409`. Missing/ambiguous compatibility requires the acknowledgement; it does not imply load, compartment, or capacity feasibility.
+- **Atomic side effects:** creates assignment, route (`routingMethod: ManualOrder`), claims, and stops; changes every selected task `Scheduled → Assigned`; appends task and assignment history. `CollectionTask.ScheduledAt` is not changed.
+- **Response:** `201 Created` `CollectionAssignmentDetailDto`; `400` invalid request, `401/403` authentication/role failures, `404` missing resource, `409` stale task/claim/resource/compatibility conflict.
 
-#### `PATCH /api/v1/routes/{id}/stops/{stopId}` `[Planned]`
-Driver updates progress at an individual stop waypoint.
-- **Access:** `Driver`.
-- **Request Body:** `{"status": "Completed"}` (or `Skipped` with notes).
-- **Response `200 OK`:** Updated `RouteStopDto`.
+#### Assignment read/order/cancellation endpoints
+
+| Endpoint | Access | Contract |
+| :--- | :--- | :--- |
+| `GET /api/v1/assignments` | `WasteOfficer`, `MunicipalManager` | Paged operational assignment list with status, driver/vehicle summary, and stop counts. |
+| `GET /api/v1/assignments/mine` | `Driver` | Paged list strictly scoped from the JWT Driver identity. |
+| `GET /api/v1/assignments/{id:guid}` | `WasteOfficer`, `MunicipalManager`, assigned `Driver` | Detail with ordered task-linked stops, assignment history, task/stop outcomes, and route data. Service-level ownership prevents Driver access to another assignment. |
+| `GET /api/v1/assignments/{id:guid}/history` | `WasteOfficer`, `MunicipalManager`, assigned `Driver` | Assignment status and route-stop execution history. Existing task history remains the authoritative C2 task audit. |
+| `PATCH /api/v1/assignments/{id:guid}/route/stops` | `WasteOfficer` | Replaces manual sequence for the assignment’s same claimed task IDs. Only valid while `Assigned`; no task target, claim, driver, vehicle, or scheduled timestamp changes. |
+| `POST /api/v1/assignments/{id:guid}/cancel` | `WasteOfficer`, `MunicipalManager` | Only `Assigned` assignment. Request: `reason` (5–500). Atomically changes unstarted tasks `Assigned → Scheduled`, records histories, releases claims, and marks assignment `Cancelled`; it never cancels underlying tasks. Returns `409` once started or terminal. |
+
+### 5.4 Driver execution and optional post-collection observation `[Planned]`
+
+| Endpoint | Access | Contract |
+| :--- | :--- | :--- |
+| `POST /api/v1/assignments/{id:guid}/start` | assigned `Driver` | Starts only an `Assigned` assignment. Atomically sets assignment `InProgress`, remaining task(s) `Assigned → InProgress`, and each report target `Scheduled → InProgress` with C1 report history. Returns `409` for stale/terminal ownership or state. |
+| `POST /api/v1/assignments/{id:guid}/stops/{stopId:guid}/complete` | assigned `Driver` | Completes only an own pending stop in an `InProgress` assignment. Report task completion changes task to `Completed` and report `InProgress → Resolved` with both histories. Bin task completion changes task to `Completed` and sets `LastCollectedAt = UtcNow`; it creates no observation. |
+| `POST /api/v1/assignments/{id:guid}/stops/{stopId:guid}/fail` | assigned `Driver` | Request: `reason` (5–500). Fails only own pending stop; task becomes `Failed` with task/stop history. Other stops remain actionable; source reports are not resolved. |
+| `POST /api/v1/assignments/{id:guid}/finalize` | assigned `Driver` | Requires every stop terminal. Sets assignment `Completed`, `PartiallyCompleted`, or `Failed` from the actual stop outcome set and appends assignment history. Returns `409` for pending stops. |
+| `POST /api/v1/assignments/{id:guid}/stops/{stopId:guid}/bin-observation` | assigned `Driver` | Optional genuine post-collection observation for the bin targeted by the Driver’s own completed stop. Reuses `RecordBinObservationRequest` (`fillLevelPercent` 0/25/50/75/100, valid condition, optional notes max 500); server derives bin, actor, and timestamp. It is append-only and does not modify task outcome or `LastCollectedAt`. |
+
+### 5.5 Failure details and replacement work `[Planned]`
+
+#### `POST /api/v1/collection-tasks/{failedTaskId:guid}/replacement`
+- **Access:** `WasteOfficer`.
+- **Request:** `scheduledAt` (future UTC), `replacementReason` (5–500), optional `handlingNotes` (max 1000), and optional `schedulingReason` where the original bin task reason is `OfficerDiscretion`.
+- **Shared preconditions:** original task is terminal `Failed`; no active task or active assignment claim exists for the same target; the original task/history is retained; server revalidates the target against current authoritative C1/C2 data.
+- **Report target:** report must still be `InProgress`; creates a new `Scheduled` task and transitions report `InProgress → Scheduled`, appending report/task histories with the actor and original/replacement task references. It never resets the report to `Verified`.
+- **Bin target:** bin must be active and current validation must establish that collection remains needed for the original reason. This command and its required replacement reason are the explicit WasteOfficer review; no separate review entity is created.
+- **Responses:** `201 Created` replacement `CollectionTaskDetailDto`; `400` validation; `401/403`; `404`; `409` non-failed original, stale target, active task/claim, invalid report/bin state, or no continuing need.
+
+### 5.6 Route display and future provider extension `[Planned]`
+
+#### `GET /api/v1/routes/{id:guid}`
+- **Access:** `WasteOfficer`, `MunicipalManager`, or assigned Driver only.
+- Returns a read-only route with ordered task-linked stops, `routingMethod`, and nullable provider-verified geometry/distance/duration.
+
+Manual ordering is the operational baseline. A future approved server-side routing provider may receive selected task coordinates and return road geometry, distance, duration, and/or a suggested ordering only when that provider actually supports each result. Calculating a route for a supplied order is distinct from multi-stop optimisation. Provider failure leaves the manual order usable; provider secrets remain server-side and no provider is selected by this contract.
+
+### 5.7 Cross-component authority and errors `[Planned]`
+
+- C3 commands use a single authoritative ASP.NET Core transaction for task status/history, assignment/claim/stop history, report status/history when applicable, and `LastCollectedAt` when applicable.
+- There is no client-supplied Driver ID on execution endpoints, no generic task-status PATCH, no Driver reassignment/transfer, and no C3 command that changes a task target or `ScheduledAt`.
+- `400` denotes malformed/invalid request data; `401` unauthenticated; `403` role or ownership denial; `404` missing assignment/task/stop/resource; `409` stale lifecycle state, active claim, duplicate occupancy, incompatibility, invalid target state, or unresolved-stop conflict.
 
 ---
 

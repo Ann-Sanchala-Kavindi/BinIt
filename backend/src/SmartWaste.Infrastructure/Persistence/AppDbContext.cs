@@ -31,6 +31,17 @@ public class AppDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
     public DbSet<CollectionTaskStatusHistory> CollectionTaskStatusHistories => Set<CollectionTaskStatusHistory>();
     public DbSet<CollectionTaskScheduleHistory> CollectionTaskScheduleHistories => Set<CollectionTaskScheduleHistory>();
 
+    // Component 3 — Fleet and driver persistence foundation
+    public DbSet<DriverProfile> DriverProfiles => Set<DriverProfile>();
+    public DbSet<Vehicle> Vehicles => Set<Vehicle>();
+    public DbSet<VehicleSupportedWasteType> VehicleSupportedWasteTypes => Set<VehicleSupportedWasteType>();
+    public DbSet<CollectionAssignment> CollectionAssignments => Set<CollectionAssignment>();
+    public DbSet<CollectionAssignmentTaskClaim> CollectionAssignmentTaskClaims => Set<CollectionAssignmentTaskClaim>();
+    public DbSet<CollectionAssignmentStatusHistory> CollectionAssignmentStatusHistories => Set<CollectionAssignmentStatusHistory>();
+    public DbSet<Route> Routes => Set<Route>();
+    public DbSet<RouteStop> RouteStops => Set<RouteStop>();
+    public DbSet<RouteStopStatusHistory> RouteStopStatusHistories => Set<RouteStopStatusHistory>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);

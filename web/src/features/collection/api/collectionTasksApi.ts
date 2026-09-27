@@ -1,5 +1,13 @@
 import { axiosClient } from '../../../api/axiosClient';
-import type { CollectionTaskAuditTrailDto, CollectionTaskDetailDto, CollectionTaskListParams, CreateManualCollectionTaskRequest, PagedCollectionTasks, RescheduleCollectionTaskRequest } from '../types/collectionTasks';
+import type {
+  CollectionTaskAuditTrailDto,
+  CollectionTaskDetailDto,
+  CollectionTaskListParams,
+  CreateManualCollectionTaskRequest,
+  CreateReplacementCollectionTaskRequest,
+  PagedCollectionTasks,
+  RescheduleCollectionTaskRequest,
+} from '../types/collectionTasks';
 
 export const collectionTasksApi = {
   getTasks: async (query: CollectionTaskListParams = {}): Promise<PagedCollectionTasks> => {
@@ -11,6 +19,16 @@ export const collectionTasksApi = {
   rescheduleTask: async (id: string, request: RescheduleCollectionTaskRequest): Promise<CollectionTaskDetailDto> => { const response = await axiosClient.post<CollectionTaskDetailDto>(`/collection-tasks/${id}/reschedule`, request); return response.data; },
   createManualTask: async (request: CreateManualCollectionTaskRequest): Promise<CollectionTaskDetailDto> => {
     const response = await axiosClient.post<CollectionTaskDetailDto>('/collection-tasks/manual', request);
+    return response.data;
+  },
+  createReplacementTask: async (
+    failedTaskId: string,
+    request: CreateReplacementCollectionTaskRequest
+  ): Promise<CollectionTaskDetailDto> => {
+    const response = await axiosClient.post<CollectionTaskDetailDto>(
+      `/collection-tasks/${failedTaskId}/replacement`,
+      request
+    );
     return response.data;
   },
 };

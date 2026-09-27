@@ -24,6 +24,12 @@ import 'package:mobile/features/reporting/models/waste_report_status_history_mod
 import 'package:mobile/features/reporting/models/waste_type.dart';
 import 'package:mobile/features/reporting/presentation/edit_report_screen.dart';
 import 'package:mobile/features/reporting/presentation/manage_report_photos_screen.dart';
+import 'package:mobile/features/driver/data/driver_repository.dart';
+import 'package:mobile/features/driver/models/assignment_detail_model.dart';
+import 'package:mobile/features/driver/models/collection_assignment_status.dart';
+import 'package:mobile/features/driver/models/driver_availability_status.dart';
+import 'package:mobile/features/driver/models/driver_self_model.dart';
+import 'package:mobile/features/driver/models/paged_assignments_model.dart';
 import 'package:mobile/features/reporting/presentation/my_reports_screen.dart';
 import 'package:mobile/features/reporting/presentation/report_detail_screen.dart';
 
@@ -35,6 +41,38 @@ class TestAuthNotifier extends AuthNotifier {
 
   @override
   AuthState build() => initialState;
+}
+
+class TestDriverRepository extends DriverRepository {
+  @override
+  Future<DriverSelfModel> getDriverSelf(String driverId) async {
+    return DriverSelfModel(
+      id: driverId,
+      displayName: 'Authenticated Driver',
+      availabilityStatus: DriverAvailabilityStatus.available,
+      isOccupied: false,
+    );
+  }
+
+  @override
+  Future<AssignmentDetailModel?> getCurrentAssignmentDetail() async {
+    return null;
+  }
+
+  @override
+  Future<PagedAssignmentsModel> getMyAssignments({
+    CollectionAssignmentStatus? status,
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    return PagedAssignmentsModel(
+      items: const [],
+      page: page,
+      pageSize: pageSize,
+      totalCount: 0,
+      totalPages: 1,
+    );
+  }
 }
 
 class TestReportingRepository extends ReportingRepository {
@@ -231,6 +269,9 @@ void main() {
                   const AuthState.authenticated(testDriverUser),
                 ),
               ),
+              driverRepositoryProvider.overrideWithValue(
+                TestDriverRepository(),
+              ),
             ],
             child: Consumer(
               builder: (context, ref, _) {
@@ -263,6 +304,9 @@ void main() {
                 () => TestAuthNotifier(
                   const AuthState.authenticated(testDriverUser),
                 ),
+              ),
+              driverRepositoryProvider.overrideWithValue(
+                TestDriverRepository(),
               ),
             ],
             child: Consumer(
@@ -484,6 +528,9 @@ void main() {
                   const AuthState.authenticated(testDriverUser),
                 ),
               ),
+              driverRepositoryProvider.overrideWithValue(
+                TestDriverRepository(),
+              ),
             ],
             child: Consumer(
               builder: (context, ref, _) {
@@ -550,6 +597,9 @@ void main() {
                 () => TestAuthNotifier(
                   const AuthState.authenticated(testDriverUser),
                 ),
+              ),
+              driverRepositoryProvider.overrideWithValue(
+                TestDriverRepository(),
               ),
             ],
             child: Consumer(
@@ -619,6 +669,9 @@ void main() {
                   const AuthState.authenticated(testDriverUser),
                 ),
               ),
+              driverRepositoryProvider.overrideWithValue(
+                TestDriverRepository(),
+              ),
             ],
             child: Consumer(
               builder: (context, ref, _) {
@@ -686,6 +739,9 @@ void main() {
                 () => TestAuthNotifier(
                   const AuthState.authenticated(testDriverUser),
                 ),
+              ),
+              driverRepositoryProvider.overrideWithValue(
+                TestDriverRepository(),
               ),
             ],
             child: Consumer(

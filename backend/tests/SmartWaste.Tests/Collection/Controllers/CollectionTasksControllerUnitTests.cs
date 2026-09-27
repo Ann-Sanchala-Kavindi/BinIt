@@ -23,10 +23,11 @@ namespace SmartWaste.Tests.Collection.Controllers;
 public class CollectionTasksControllerUnitTests
 {
     private readonly Mock<ICollectionTaskService> _mockService = new();
+    private readonly Mock<IAssignmentReadService> _assignmentReadService = new();
 
     private CollectionTasksController CreateControllerWithUser(Guid? userId, string? role, string? rawUserId = null)
     {
-        var controller = new CollectionTasksController(_mockService.Object);
+        var controller = new CollectionTasksController(_mockService.Object, _assignmentReadService.Object);
         var claims = new List<Claim>();
 
         if (rawUserId != null)
@@ -52,6 +53,16 @@ public class CollectionTasksControllerUnitTests
         };
 
         return controller;
+    }
+
+    [Fact]
+    public async Task CreateReplacementTask_WasteOfficerClaims_DelegatesAndReturns201()
+    {
+        var officerId = Guid.NewGuid(); var failedTaskId = Guid.NewGuid(); var request = new CreateReplacementCollectionTaskRequest { ScheduledAt = DateTime.UtcNow.AddHours(1), ReplacementReason = "Officer reviewed and approved a replacement collection." };
+        _mockService.Setup(x => x.CreateReplacementTaskAsync(failedTaskId, request, officerId, AppRoles.WasteOfficer, It.IsAny<CancellationToken>())).ReturnsAsync(new CollectionTaskDetailDto { Id = Guid.NewGuid() });
+        var result = await CreateControllerWithUser(officerId, AppRoles.WasteOfficer).CreateReplacementTask(failedTaskId, request, CancellationToken.None);
+        Assert.IsType<CreatedAtActionResult>(result);
+        _mockService.VerifyAll();
     }
 
     // ──────────────────────────────────────────────────────────────────────────

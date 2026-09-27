@@ -7,6 +7,8 @@ using SmartWaste.Application.DTOs.Users;
 using SmartWaste.Application.Interfaces;
 using SmartWaste.Domain.Common;
 using SmartWaste.Domain.Entities;
+using SmartWaste.Infrastructure.Identity.Services;
+using SmartWaste.Infrastructure.Persistence;
 
 namespace SmartWaste.Infrastructure.Services;
 
@@ -25,13 +27,16 @@ public class UserService : IUserService
 
     private readonly UserManager<AppUser> _userManager;
     private readonly RoleManager<IdentityRole<Guid>> _roleManager;
+    private readonly AppDbContext _db;
 
     public UserService(
         UserManager<AppUser> userManager,
-        RoleManager<IdentityRole<Guid>> roleManager)
+        RoleManager<IdentityRole<Guid>> roleManager,
+        AppDbContext db)
     {
         _userManager = userManager;
         _roleManager = roleManager;
+        _db = db;
     }
 
     public async Task<PagedResult<UserManagementDto>> GetUsersAsync(UserListQuery query)
@@ -163,6 +168,20 @@ public class UserService : IUserService
             // Rollback user creation to maintain clean state
             await _userManager.DeleteAsync(user);
             throw new IdentityOperationException(roleResult.Errors.Select(e => e.Description));
+        }
+
+        if (request.Role == AppRoles.Driver)
+        {
+            try
+            {
+                await DriverProfileProvisioner.EnsureAsync(_db, user.Id);
+            }
+            catch
+            {
+                await _userManager.RemoveFromRoleAsync(user, request.Role);
+                await _userManager.DeleteAsync(user);
+                throw;
+            }
         }
 
         return new CreateUserResponse

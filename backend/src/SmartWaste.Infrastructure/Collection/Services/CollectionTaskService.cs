@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Cryptography;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +37,7 @@ public class CollectionTaskService : ICollectionTaskService
     private readonly IConfiguration? _configuration;
     private readonly CollectionTaskListQueryValidator _listQueryValidator = new();
     private readonly CreateManualCollectionTaskRequestValidator _createValidator = new();
+    private readonly CreateReplacementCollectionTaskRequestValidator _replacementValidator = new();
     private readonly RescheduleCollectionTaskRequestValidator _rescheduleValidator = new();
 
     public CollectionTaskService(AppDbContext db, IConfiguration? configuration = null)
@@ -168,6 +170,77 @@ public class CollectionTaskService : ICollectionTaskService
         }
     }
 
+    public async Task<CollectionTaskDetailDto> CreateReplacementTaskAsync(
+        Guid failedTaskId,
+        CreateReplacementCollectionTaskRequest request,
+        Guid actorUserId,
+        string actorRole,
+        CancellationToken cancellationToken = default)
+    {
+        if (actorRole != AppRoles.WasteOfficer) throw new ForbiddenException("Only Waste Officers can create failed-task replacements.");
+        var validation = await _replacementValidator.ValidateAsync(request, cancellationToken);
+        if (!validation.IsValid) throw new ValidationException(validation.Errors);
+        var nowUtc = DateTime.UtcNow;
+        var isInMemory = _db.Database.ProviderName?.Contains("InMemory") == true;
+        await using var tx = isInMemory ? null : await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        try
+        {
+            var original = await _db.CollectionTasks.Include(x => x.WasteReport).Include(x => x.WasteBin).SingleOrDefaultAsync(x => x.Id == failedTaskId, cancellationToken)
+                ?? throw new NotFoundException($"Collection task '{failedTaskId}' was not found.");
+            if (original.Status != CollectionTaskStatus.Failed) throw new BusinessRuleConflictException("Only terminal Failed collection tasks can be replaced.");
+            if (original.WasteReportId.HasValue == original.WasteBinId.HasValue) throw new BusinessRuleConflictException("The failed collection task does not have a valid single target.");
+            if (await _db.CollectionAssignmentTaskClaims.AnyAsync(x => x.CollectionTaskId == original.Id && x.IsActive, cancellationToken)) throw new BusinessRuleConflictException("The failed task still has an active assignment claim.");
+            var hasConflictingTask = await _db.CollectionTasks.AnyAsync(x => x.Id != original.Id &&
+                ((original.WasteReportId.HasValue && x.WasteReportId == original.WasteReportId) || (original.WasteBinId.HasValue && x.WasteBinId == original.WasteBinId)) &&
+                (x.Status == CollectionTaskStatus.Scheduled || x.Status == CollectionTaskStatus.Assigned || x.Status == CollectionTaskStatus.InProgress), cancellationToken);
+            if (hasConflictingTask) throw new BusinessRuleConflictException("An active collection task already exists for this target.");
+            var taskCode = await GenerateUniqueTaskCodeAsync(nowUtc, cancellationToken);
+            var replacementReason = request.ReplacementReason!.Trim();
+            var handlingNotes = string.IsNullOrWhiteSpace(request.HandlingNotes) ? original.HandlingNotes : request.HandlingNotes.Trim();
+            CollectionTask replacement;
+            if (original.WasteReportId.HasValue)
+            {
+                var report = original.WasteReport ?? throw new BusinessRuleConflictException("The failed task report target no longer exists.");
+                if (original.CollectionReason != CollectionReason.VerifiedReport || report.Status != WasteReportStatus.InProgress) throw new BusinessRuleConflictException("The failed report task source is not eligible for replacement.");
+                replacement = new CollectionTask { TaskCode = taskCode, WasteReportId = report.Id, CollectionReason = CollectionReason.VerifiedReport, Status = CollectionTaskStatus.Scheduled, ScheduledAt = request.ScheduledAt!.Value, HandlingNotes = handlingNotes, SchedulingReason = string.IsNullOrWhiteSpace(request.SchedulingReason) ? original.SchedulingReason : request.SchedulingReason.Trim(), CreatedByUserId = actorUserId, CreationMethod = TaskCreationMethod.Manual, CreatedAt = nowUtc };
+                report.Status = WasteReportStatus.Scheduled; report.UpdatedAt = nowUtc;
+                _db.WasteReportStatusHistories.Add(new WasteReportStatusHistory { WasteReportId = report.Id, FromStatus = WasteReportStatus.InProgress, ToStatus = WasteReportStatus.Scheduled, ChangedByUserId = actorUserId, ChangedAt = nowUtc, Notes = $"Failed task {original.TaskCode} replaced by {taskCode}: {replacementReason}" });
+                _db.CollectionTasks.Add(replacement);
+                _db.CollectionTaskStatusHistories.Add(new CollectionTaskStatusHistory { CollectionTaskId = replacement.Id, ToStatus = CollectionTaskStatus.Scheduled, ChangedByUserId = actorUserId, ChangedAt = nowUtc, Notes = $"Replacement for failed task {original.TaskCode}: {replacementReason}" });
+            }
+            else
+            {
+                var bin = original.WasteBin ?? throw new BusinessRuleConflictException("The failed task bin target no longer exists.");
+                var schedulingReason = string.IsNullOrWhiteSpace(request.SchedulingReason) ? original.SchedulingReason : request.SchedulingReason.Trim();
+                var creationRequest = new CreateManualCollectionTaskRequest { WasteBinId = bin.Id, CollectionReason = original.CollectionReason, ScheduledAt = request.ScheduledAt, HandlingNotes = handlingNotes, SchedulingReason = schedulingReason };
+                replacement = await HandleBinTaskCreationAsync(creationRequest, taskCode, actorUserId, nowUtc, cancellationToken, allowFailedReplacement: true, initialHistoryNotes: $"Replacement for failed task {original.TaskCode}: {replacementReason}");
+            }
+            await _db.SaveChangesAsync(cancellationToken);
+            if (tx is not null) await tx.CommitAsync(cancellationToken);
+            return await BuildDetailDtoAsync(replacement.Id, cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            if (tx is not null) await tx.RollbackAsync(cancellationToken);
+            throw new BusinessRuleConflictException("A replacement task for this target was created concurrently.");
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure })
+        {
+            if (tx is not null) await tx.RollbackAsync(cancellationToken);
+            throw new BusinessRuleConflictException("The failed task changed while replacement was in progress. Retry the operation.");
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.SerializationFailure)
+        {
+            if (tx is not null) await tx.RollbackAsync(cancellationToken);
+            throw new BusinessRuleConflictException("The failed task changed while replacement was in progress. Retry the operation.");
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
     private async Task<CollectionTask> HandleReportTaskCreationAsync(
         CreateManualCollectionTaskRequest request,
         string taskCode,
@@ -293,7 +366,9 @@ public class CollectionTaskService : ICollectionTaskService
         string taskCode,
         Guid actorUserId,
         DateTime nowUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool allowFailedReplacement = false,
+        string? initialHistoryNotes = null)
     {
         var binId = request.WasteBinId!.Value;
 
@@ -332,7 +407,7 @@ public class CollectionTaskService : ICollectionTaskService
             .OrderByDescending(t => t.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (latestTask != null && latestTask.Status == CollectionTaskStatus.Failed)
+        if (!allowFailedReplacement && latestTask != null && latestTask.Status == CollectionTaskStatus.Failed)
         {
             throw new BusinessRuleConflictException(
                 $"Cannot schedule a collection task for waste bin '{binId}' because its previous collection task '{latestTask.TaskCode}' failed. Explicit WasteOfficer review is required before replacement.");
@@ -441,7 +516,7 @@ public class CollectionTaskService : ICollectionTaskService
             FromStatus = null,
             ToStatus = CollectionTaskStatus.Scheduled,
             ChangedByUserId = actorUserId,
-            Notes = "Task manually created",
+            Notes = initialHistoryNotes ?? "Task manually created",
             ChangedAt = nowUtc
         };
         _db.CollectionTaskStatusHistories.Add(taskStatusHistory);
