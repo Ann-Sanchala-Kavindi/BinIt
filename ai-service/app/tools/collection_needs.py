@@ -1,13 +1,31 @@
 import logging
 import time
+from dataclasses import dataclass, field
 from datetime import date
-from typing import Optional
+from typing import List, Optional
 
 import httpx
 from langchain_core.tools import tool
 
 from app.core.config import get_settings
-from app.models.collection_needs import CollectionNeedsToolResponse
+from app.models.collection_needs import CollectionNeedToolItem, CollectionNeedsToolResponse
+
+
+@dataclass
+class CollectionNeedsSnapshot:
+    """Merged result of all fetched pages for the complete authoritative CollectionNeeds snapshot.
+
+    Invariant: is_complete is True only when every page up to total_pages was successfully
+    fetched and the merged item count matches the authoritative total_count.
+    is_complete == False means the snapshot is PARTIAL and must NOT be treated as
+    approval-ready in the future Shared Planner workflow.
+    """
+    items: List[CollectionNeedToolItem] = field(default_factory=list)
+    retrieved_pages: List[int] = field(default_factory=list)
+    page_size: int = 20
+    total_count: int = 0
+    total_pages: int = 0
+    is_complete: bool = False
 
 logger = logging.getLogger(__name__)
 
@@ -131,3 +149,94 @@ def get_collection_needs(
         page=page,
         page_size=page_size,
     )
+
+
+def fetch_all_collection_needs(
+    target_type: Optional[str] = None,
+    collection_reason: Optional[str] = None,
+    target_date: Optional[str] = None,
+    page_size: int = 20,
+    client: Optional[httpx.Client] = None,
+) -> CollectionNeedsSnapshot:
+    """Deterministically fetch every page of the authoritative CollectionNeeds snapshot.
+
+    Flow:
+    1. Fetch page 1.
+    2. Read total_pages from the authoritative response.
+    3. If total_pages > 1, fetch pages 2..total_pages using the same client.
+    4. Merge all items into one list.
+    5. Return a CollectionNeedsSnapshot with is_complete=True only when every page
+       was retrieved and the merged item count equals authoritative total_count.
+
+    Failure contract:
+    - Any page failure (network, HTTP error, validation) raises RuntimeError immediately.
+    - The caller receives is_complete=False or an exception; never a silently incomplete
+      snapshot presented as complete.
+    - is_complete=False is the sentinel for the future Shared Planner to refuse
+      advancing to human approval/execution.
+    """
+    snapshot = CollectionNeedsSnapshot(page_size=page_size)
+
+    # Fetch page 1 and determine total_pages
+    first_page = fetch_collection_needs(
+        target_type=target_type,
+        collection_reason=collection_reason,
+        target_date=target_date,
+        page=1,
+        page_size=page_size,
+        client=client,
+    )
+
+    snapshot.total_count = first_page.total_count
+    snapshot.total_pages = first_page.total_pages
+    snapshot.items.extend(first_page.items)
+    snapshot.retrieved_pages.append(1)
+
+    logger.debug(
+        "CollectionNeeds page 1/%d fetched: %d items, totalCount=%d",
+        first_page.total_pages, len(first_page.items), first_page.total_count,
+    )
+
+    # Fetch remaining pages if totalPages > 1
+    for page_num in range(2, first_page.total_pages + 1):
+        logger.debug("Fetching CollectionNeeds page %d/%d", page_num, first_page.total_pages)
+        page_response = fetch_collection_needs(
+            target_type=target_type,
+            collection_reason=collection_reason,
+            target_date=target_date,
+            page=page_num,
+            page_size=page_size,
+            client=client,
+        )
+
+        # Guard: backend pagination metadata must remain consistent across pages
+        if page_response.total_count != first_page.total_count:
+            raise RuntimeError(
+                f"Inconsistent totalCount across pages: page 1 reported {first_page.total_count}, "
+                f"page {page_num} reported {page_response.total_count}. "
+                "Aborting — authoritative source data is inconsistent."
+            )
+        if page_response.total_pages != first_page.total_pages:
+            raise RuntimeError(
+                f"Inconsistent totalPages across pages: page 1 reported {first_page.total_pages}, "
+                f"page {page_num} reported {page_response.total_pages}. "
+                "Aborting — authoritative source data is inconsistent."
+            )
+
+        snapshot.items.extend(page_response.items)
+        snapshot.retrieved_pages.append(page_num)
+
+    # Derive is_complete deterministically — never set blindly
+    snapshot.is_complete = (
+        len(snapshot.retrieved_pages) == snapshot.total_pages
+        and len(snapshot.items) == snapshot.total_count
+    ) if snapshot.total_pages > 0 else (snapshot.total_count == 0)
+
+    logger.info(
+        "CollectionNeeds full snapshot: %d/%d items, pages=%s, isComplete=%s",
+        len(snapshot.items), snapshot.total_count,
+        snapshot.retrieved_pages, snapshot.is_complete,
+    )
+
+    return snapshot
+

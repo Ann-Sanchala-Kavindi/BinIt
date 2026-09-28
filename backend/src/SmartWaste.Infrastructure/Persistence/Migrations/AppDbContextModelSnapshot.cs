@@ -1066,6 +1066,260 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                     b.ToTable("WasteReportStatusHistories", (string)null);
                 });
 
+            modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CurrentStep")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("None");
+
+                    b.Property<string>("FinalOutcome")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("InitiatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Objective")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("Created");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("IX_AgentWorkflows_CreatedAt");
+
+                    b.HasIndex("InitiatedByUserId")
+                        .HasDatabaseName("IX_AgentWorkflows_InitiatedByUserId");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("IX_AgentWorkflows_Status");
+
+                    b.ToTable("AgentWorkflows", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AgentWorkflows_Objective", "LENGTH(TRIM(\"Objective\")) >= 5");
+
+                            t.HasCheckConstraint("CK_AgentWorkflows_Status", "\"Status\" IN ('Created', 'Planning', 'AwaitingCollectionApproval', 'CollectionNeedsRevision', 'CollectionApproved', 'CreatingScheduledTasks', 'FleetPlanning', 'OperationalValidation', 'AwaitingDispatchApproval', 'DispatchNeedsRevision', 'DispatchApproved', 'ExecutingAssignments', 'Completed', 'Rejected', 'Failed')");
+                        });
+                });
+
+            modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflowApproval", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ApprovalStage")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("DecidedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("DecidedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Decision")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("DecisionPayloadJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("DecisionReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("WorkflowStepId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DecidedByUserId");
+
+                    b.HasIndex("WorkflowId")
+                        .HasDatabaseName("IX_AgentWorkflowApprovals_WorkflowId");
+
+                    b.HasIndex("WorkflowStepId");
+
+                    b.ToTable("AgentWorkflowApprovals", (string)null);
+                });
+
+            modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflowExecutionResult", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("ExecutedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ExecutionType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ResultJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("WorkflowStepId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkflowId")
+                        .HasDatabaseName("IX_AgentWorkflowExecutionResults_WorkflowId");
+
+                    b.HasIndex("WorkflowStepId");
+
+                    b.ToTable("AgentWorkflowExecutionResults", (string)null);
+                });
+
+            modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflowStep", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("InputJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("OutputJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Pending");
+
+                    b.Property<string>("StepType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ValidationJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkflowId", "Sequence")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AgentWorkflowSteps_WorkflowId_Sequence");
+
+                    b.ToTable("AgentWorkflowSteps", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AgentWorkflowSteps_Sequence", "\"Sequence\" > 0");
+
+                            t.HasCheckConstraint("CK_AgentWorkflowSteps_Status", "\"Status\" IN ('Pending', 'Running', 'Completed', 'Failed', 'Skipped')");
+                        });
+                });
+
+            modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflowTransition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ChangedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ToStatus")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("WorkflowId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("WorkflowId", "ChangedAt")
+                        .HasDatabaseName("IX_AgentWorkflowTransitions_WorkflowId_ChangedAt");
+
+                    b.ToTable("AgentWorkflowTransitions", (string)null);
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", null)
@@ -1420,6 +1674,90 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                     b.Navigation("WasteReport");
                 });
 
+            modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflow", b =>
+                {
+                    b.HasOne("SmartWaste.Domain.Entities.AppUser", "InitiatedByUser")
+                        .WithMany()
+                        .HasForeignKey("InitiatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("InitiatedByUser");
+                });
+
+            modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflowApproval", b =>
+                {
+                    b.HasOne("SmartWaste.Domain.Entities.AppUser", "DecidedByUser")
+                        .WithMany()
+                        .HasForeignKey("DecidedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SmartWaste.Domain.Workflow.Entities.AgentWorkflow", "Workflow")
+                        .WithMany("Approvals")
+                        .HasForeignKey("WorkflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SmartWaste.Domain.Workflow.Entities.AgentWorkflowStep", "WorkflowStep")
+                        .WithMany()
+                        .HasForeignKey("WorkflowStepId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("DecidedByUser");
+
+                    b.Navigation("Workflow");
+
+                    b.Navigation("WorkflowStep");
+                });
+
+            modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflowExecutionResult", b =>
+                {
+                    b.HasOne("SmartWaste.Domain.Workflow.Entities.AgentWorkflow", "Workflow")
+                        .WithMany("ExecutionResults")
+                        .HasForeignKey("WorkflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SmartWaste.Domain.Workflow.Entities.AgentWorkflowStep", "WorkflowStep")
+                        .WithMany()
+                        .HasForeignKey("WorkflowStepId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Workflow");
+
+                    b.Navigation("WorkflowStep");
+                });
+
+            modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflowStep", b =>
+                {
+                    b.HasOne("SmartWaste.Domain.Workflow.Entities.AgentWorkflow", "Workflow")
+                        .WithMany("Steps")
+                        .HasForeignKey("WorkflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Workflow");
+                });
+
+            modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflowTransition", b =>
+                {
+                    b.HasOne("SmartWaste.Domain.Entities.AppUser", "ChangedByUser")
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("SmartWaste.Domain.Workflow.Entities.AgentWorkflow", "Workflow")
+                        .WithMany("Transitions")
+                        .HasForeignKey("WorkflowId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChangedByUser");
+
+                    b.Navigation("Workflow");
+                });
+
             modelBuilder.Entity("SmartWaste.Domain.Collection.Entities.CollectionAssignment", b =>
                 {
                     b.Navigation("Route");
@@ -1470,6 +1808,17 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                     b.Navigation("Attachments");
 
                     b.Navigation("StatusHistory");
+                });
+
+            modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflow", b =>
+                {
+                    b.Navigation("Approvals");
+
+                    b.Navigation("ExecutionResults");
+
+                    b.Navigation("Steps");
+
+                    b.Navigation("Transitions");
                 });
 #pragma warning restore 612, 618
         }

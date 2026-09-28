@@ -84,4 +84,33 @@ public class AiToolsFleetPlanningController : ControllerBase
         var result = await _service.CheckCompatibilityAsync(request, cancellationToken);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Retrieves fresh, minimal operational context for specific tasks, drivers, and vehicles referenced in an AI dispatch plan.
+    /// Used exclusively by the C4 validation and operations agent.
+    /// </summary>
+    [HttpPost("operational-validation-context")]
+    [ProducesResponseType(typeof(OperationalValidationContextDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<IActionResult> GetOperationalValidationContext(
+        [FromBody] GetOperationalValidationContextRequest request,
+        CancellationToken cancellationToken)
+    {
+        var validator = new GetOperationalValidationContextRequestValidator();
+        var validationResult = await validator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            return BadRequest(new ValidationProblemDetails(validationResult.ToDictionary())
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Invalid Request Parameters",
+                Detail = "One or more request parameters failed validation.",
+                Instance = HttpContext.Request.Path
+            });
+        }
+
+        var result = await _service.GetOperationalValidationContextAsync(request, cancellationToken);
+        return Ok(result);
+    }
 }

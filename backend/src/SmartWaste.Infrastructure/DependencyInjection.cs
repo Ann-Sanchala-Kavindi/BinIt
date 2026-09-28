@@ -7,6 +7,9 @@ using SmartWaste.Application.Fleet.Interfaces;
 using SmartWaste.Application.Common.Options;
 using SmartWaste.Application.Interfaces;
 using SmartWaste.Application.Reporting.Interfaces;
+using SmartWaste.Application.Workflow.Interfaces;
+using SmartWaste.Application.Workflow.Services;
+using SmartWaste.Infrastructure.Workflow.Services;
 using SmartWaste.Domain.Entities;
 using SmartWaste.Infrastructure.Collection.Services;
 using SmartWaste.Infrastructure.Fleet.Services;
@@ -77,6 +80,10 @@ public static class DependencyInjection
         services.AddScoped<IAssignmentReadService, AssignmentReadService>();
         services.AddScoped<ICollectionAssignmentService, CollectionAssignmentService>();
         services.AddScoped<IFleetPlanningAiService, FleetPlanningAiService>();
+
+        // Agentic AI Workflow Services
+        services.AddSingleton<IAgentWorkflowStateMachine, AgentWorkflowStateMachine>();
+        services.AddScoped<IAgentWorkflowService, AgentWorkflowService>();
 
         // Cloud Storage — Supabase Storage
         var storageSection = configuration.GetSection(SmartWaste.Infrastructure.Reporting.Storage.SupabaseStorageOptions.SectionName);
