@@ -145,4 +145,85 @@ public class AiToolsFleetPlanningControllerUnitTests
         var details = badRequest.Value.Should().BeOfType<ValidationProblemDetails>().Subject;
         details.Errors.Should().ContainKey("VehicleId");
     }
+
+    [Fact]
+    public async Task GetOperationalValidationContext_ValidRequest_ReturnsOkResultWithContext()
+    {
+        var request = new GetOperationalValidationContextRequest
+        {
+            TaskIds = new[] { Guid.NewGuid() },
+            DriverIds = new[] { Guid.NewGuid() },
+            VehicleIds = new[] { Guid.NewGuid() }
+        };
+        var expected = new OperationalValidationContextDto
+        {
+            Tasks = new List<OperationalValidationTaskDto>(),
+            Drivers = new List<OperationalValidationDriverDto>(),
+            Vehicles = new List<OperationalValidationVehicleDto>()
+        };
+
+        _service.Setup(s => s.GetOperationalValidationContextAsync(request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(expected);
+
+        var controller = CreateController();
+        var result = await controller.GetOperationalValidationContext(request, CancellationToken.None);
+
+        var ok = result.Should().BeOfType<OkObjectResult>().Subject;
+        ok.Value.Should().BeSameAs(expected);
+    }
+
+    [Fact]
+    public async Task GetOperationalValidationContext_DuplicateTaskIds_ReturnsBadRequest()
+    {
+        var taskId = Guid.NewGuid();
+        var controller = CreateController();
+        var result = await controller.GetOperationalValidationContext(
+            new GetOperationalValidationContextRequest { TaskIds = new[] { taskId, taskId } },
+            CancellationToken.None);
+
+        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var details = badRequest.Value.Should().BeOfType<ValidationProblemDetails>().Subject;
+        details.Errors.Should().ContainKey("TaskIds");
+    }
+
+    [Fact]
+    public async Task GetOperationalValidationContext_DuplicateDriverIds_ReturnsBadRequest()
+    {
+        var driverId = Guid.NewGuid();
+        var controller = CreateController();
+        var result = await controller.GetOperationalValidationContext(
+            new GetOperationalValidationContextRequest { DriverIds = new[] { driverId, driverId } },
+            CancellationToken.None);
+
+        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var details = badRequest.Value.Should().BeOfType<ValidationProblemDetails>().Subject;
+        details.Errors.Should().ContainKey("DriverIds");
+    }
+
+    [Fact]
+    public async Task GetOperationalValidationContext_DuplicateVehicleIds_ReturnsBadRequest()
+    {
+        var vehicleId = Guid.NewGuid();
+        var controller = CreateController();
+        var result = await controller.GetOperationalValidationContext(
+            new GetOperationalValidationContextRequest { VehicleIds = new[] { vehicleId, vehicleId } },
+            CancellationToken.None);
+
+        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var details = badRequest.Value.Should().BeOfType<ValidationProblemDetails>().Subject;
+        details.Errors.Should().ContainKey("VehicleIds");
+    }
+
+    [Fact]
+    public async Task GetOperationalValidationContext_EmptyGuidInTaskIds_ReturnsBadRequest()
+    {
+        var controller = CreateController();
+        var result = await controller.GetOperationalValidationContext(
+            new GetOperationalValidationContextRequest { TaskIds = new[] { Guid.Empty } },
+            CancellationToken.None);
+
+        var badRequest = result.Should().BeOfType<BadRequestObjectResult>().Subject;
+        var details = badRequest.Value.Should().BeOfType<ValidationProblemDetails>().Subject;
+        details.Errors.Should().ContainKey("TaskIds[0]");
+    }
 }

@@ -137,4 +137,44 @@ public class AiToolsFleetPlanningAuthIntegrationTests
         var response = await _client.SendAsync(request);
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
+
+    [Fact]
+    public async Task GetOperationalValidationContext_WithMissingInternalServiceKey_Returns401Unauthorized()
+    {
+        var request = CreateInternalRequest(HttpMethod.Post, "/api/v1/internal/ai-tools/operational-validation-context", apiKey: null,
+            JsonContent.Create(new GetOperationalValidationContextRequest()));
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetOperationalValidationContext_WithInvalidInternalServiceKey_Returns401Unauthorized()
+    {
+        var request = CreateInternalRequest(HttpMethod.Post, "/api/v1/internal/ai-tools/operational-validation-context", apiKey: "WrongKey",
+            JsonContent.Create(new GetOperationalValidationContextRequest()));
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetOperationalValidationContext_WithValidKey_Returns200OK()
+    {
+        var request = CreateInternalRequest(HttpMethod.Post, "/api/v1/internal/ai-tools/operational-validation-context", apiKey: InternalApiKey,
+            JsonContent.Create(new GetOperationalValidationContextRequest
+            {
+                TaskIds = Array.Empty<Guid>(),
+                DriverIds = Array.Empty<Guid>(),
+                VehicleIds = Array.Empty<Guid>()
+            }));
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<OperationalValidationContextDto>(SharedTestJsonOptions);
+        result.Should().NotBeNull();
+        result!.Tasks.Should().BeEmpty();
+        result.Drivers.Should().BeEmpty();
+        result.Vehicles.Should().BeEmpty();
+    }
 }

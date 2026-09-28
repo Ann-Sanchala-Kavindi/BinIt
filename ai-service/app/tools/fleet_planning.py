@@ -140,6 +140,80 @@ def fetch_fleet_planning_context(
             http_client.close()
 
 
+def fetch_all_fleet_planning_context(
+    page_size: int = 20,
+    client: Optional[httpx.Client] = None,
+) -> FleetPlanningContextResponse:
+    """Fetch a complete fleet planning context snapshot across all task pages.
+
+    Deterministically fetches page 1, inspects taskTotalPages, and retrieves all
+    remaining pages (2..taskTotalPages). Merges Scheduled collection tasks and
+    deduplicates driver and vehicle resources by authoritative ID.
+    Raises RuntimeError on any page failure or metadata inconsistency so that
+    incomplete snapshots are never treated as complete.
+
+    Args:
+        page_size: Number of collection tasks per page (between 1 and 50, default 20).
+        client: Optional custom httpx.Client for dependency injection or testing.
+
+    Returns:
+        FleetPlanningContextResponse containing all merged tasks, drivers, and vehicles.
+    """
+    first_page = fetch_fleet_planning_context(
+        page=1,
+        page_size=page_size,
+        client=client,
+    )
+
+    all_tasks = list(first_page.tasks)
+    driver_map = {d.driver_id: d for d in first_page.drivers}
+    vehicle_map = {v.vehicle_id: v for v in first_page.vehicles}
+
+    for page_num in range(2, first_page.task_total_pages + 1):
+        page_context = fetch_fleet_planning_context(
+            page=page_num,
+            page_size=page_size,
+            client=client,
+        )
+
+        if page_context.task_total_count != first_page.task_total_count:
+            raise RuntimeError(
+                f"Inconsistent taskTotalCount across pages: page 1 reported {first_page.task_total_count}, "
+                f"page {page_num} reported {page_context.task_total_count}. "
+                "Aborting — authoritative source data is inconsistent."
+            )
+        if page_context.task_total_pages != first_page.task_total_pages:
+            raise RuntimeError(
+                f"Inconsistent taskTotalPages across pages: page 1 reported {first_page.task_total_pages}, "
+                f"page {page_num} reported {page_context.task_total_pages}. "
+                "Aborting — authoritative source data is inconsistent."
+            )
+
+        all_tasks.extend(page_context.tasks)
+
+        for d in page_context.drivers:
+            if d.driver_id not in driver_map:
+                driver_map[d.driver_id] = d
+
+        for v in page_context.vehicles:
+            if v.vehicle_id not in vehicle_map:
+                vehicle_map[v.vehicle_id] = v
+
+    task_ids = [t.task_id for t in all_tasks]
+    if len(task_ids) != len(set(task_ids)):
+        raise RuntimeError("Duplicate collection task detected across context pages.")
+
+    return FleetPlanningContextResponse(
+        tasks=all_tasks,
+        drivers=list(driver_map.values()),
+        vehicles=list(vehicle_map.values()),
+        taskPage=1,
+        taskPageSize=page_size,
+        taskTotalCount=first_page.task_total_count,
+        taskTotalPages=first_page.task_total_pages,
+    )
+
+
 def fetch_fleet_compatibility(
     task_ids: Sequence[Union[UUID, str]],
     vehicle_id: Union[UUID, str],

@@ -16,6 +16,7 @@ from app.tools.fleet_planning import (
     FLEET_PLANNING_CONTEXT_PATH,
     INTERNAL_AUTH_HEADER,
     check_fleet_compatibility,
+    fetch_all_fleet_planning_context,
     fetch_fleet_compatibility,
     fetch_fleet_planning_context,
     get_fleet_planning_context,
@@ -413,3 +414,134 @@ def test_langchain_tool_wrappers_metadata():
     assert "Scheduled collection tasks" in get_fleet_planning_context.description
     assert check_fleet_compatibility.name == "check_fleet_compatibility"
     assert "waste-type compatibility" in check_fleet_compatibility.description
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 6. MULTI-PAGE SNAPSHOT RETRIEVAL TESTS (fetch_all_fleet_planning_context)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_fetch_all_context_single_page():
+    mock_client = MagicMock(spec=httpx.Client)
+    page1_data = {
+        "tasks": [_sample_task(task_code="TSK-001")],
+        "drivers": [_sample_driver(display_name="Driver 1")],
+        "vehicles": [_sample_vehicle(reg="WP-001")],
+        "taskPage": 1,
+        "taskPageSize": 20,
+        "taskTotalCount": 1,
+        "taskTotalPages": 1,
+    }
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = page1_data
+    mock_client.get.return_value = mock_resp
+
+    result = fetch_all_fleet_planning_context(page_size=20, client=mock_client)
+
+    assert len(result.tasks) == 1
+    assert result.task_total_count == 1
+    assert result.task_total_pages == 1
+    assert mock_client.get.call_count == 1
+
+
+def test_fetch_all_context_multi_page_merges_tasks_and_dedupes_resources():
+    mock_client = MagicMock(spec=httpx.Client)
+    d1 = _sample_driver(display_name="Driver 1")
+    v1 = _sample_vehicle(reg="WP-001")
+    page1_data = {
+        "tasks": [_sample_task(task_code="TSK-001")],
+        "drivers": [d1],
+        "vehicles": [v1],
+        "taskPage": 1,
+        "taskPageSize": 1,
+        "taskTotalCount": 2,
+        "taskTotalPages": 2,
+    }
+    page2_data = {
+        "tasks": [_sample_task(task_code="TSK-002")],
+        "drivers": [d1],  # Duplicate driver across pages
+        "vehicles": [v1],  # Duplicate vehicle across pages
+        "taskPage": 2,
+        "taskPageSize": 1,
+        "taskTotalCount": 2,
+        "taskTotalPages": 2,
+    }
+    resp1, resp2 = MagicMock(), MagicMock()
+    resp1.status_code = 200
+    resp1.json.return_value = page1_data
+    resp2.status_code = 200
+    resp2.json.return_value = page2_data
+    mock_client.get.side_effect = [resp1, resp2]
+
+    result = fetch_all_fleet_planning_context(page_size=1, client=mock_client)
+
+    assert len(result.tasks) == 2
+    assert result.tasks[0].task_code == "TSK-001"
+    assert result.tasks[1].task_code == "TSK-002"
+    assert len(result.drivers) == 1  # Deduplicated
+    assert len(result.vehicles) == 1  # Deduplicated
+    assert mock_client.get.call_count == 2
+
+
+def test_fetch_all_context_inconsistent_total_count_raises_error():
+    mock_client = MagicMock(spec=httpx.Client)
+    page1_data = {
+        "tasks": [_sample_task()],
+        "drivers": [],
+        "vehicles": [],
+        "taskPage": 1,
+        "taskPageSize": 1,
+        "taskTotalCount": 2,
+        "taskTotalPages": 2,
+    }
+    page2_data = {
+        "tasks": [_sample_task()],
+        "drivers": [],
+        "vehicles": [],
+        "taskPage": 2,
+        "taskPageSize": 1,
+        "taskTotalCount": 999,  # Inconsistent!
+        "taskTotalPages": 2,
+    }
+    resp1, resp2 = MagicMock(), MagicMock()
+    resp1.status_code = 200
+    resp1.json.return_value = page1_data
+    resp2.status_code = 200
+    resp2.json.return_value = page2_data
+    mock_client.get.side_effect = [resp1, resp2]
+
+    with pytest.raises(RuntimeError, match="Inconsistent taskTotalCount"):
+        fetch_all_fleet_planning_context(page_size=1, client=mock_client)
+
+
+def test_fetch_all_context_duplicate_task_id_across_pages_raises_error():
+    mock_client = MagicMock(spec=httpx.Client)
+    shared_task_id = uuid4()
+    page1_data = {
+        "tasks": [_sample_task(task_id=shared_task_id)],
+        "drivers": [],
+        "vehicles": [],
+        "taskPage": 1,
+        "taskPageSize": 1,
+        "taskTotalCount": 2,
+        "taskTotalPages": 2,
+    }
+    page2_data = {
+        "tasks": [_sample_task(task_id=shared_task_id)],  # Same task ID!
+        "drivers": [],
+        "vehicles": [],
+        "taskPage": 2,
+        "taskPageSize": 1,
+        "taskTotalCount": 2,
+        "taskTotalPages": 2,
+    }
+    resp1, resp2 = MagicMock(), MagicMock()
+    resp1.status_code = 200
+    resp1.json.return_value = page1_data
+    resp2.status_code = 200
+    resp2.json.return_value = page2_data
+    mock_client.get.side_effect = [resp1, resp2]
+
+    with pytest.raises(RuntimeError, match="Duplicate collection task detected"):
+        fetch_all_fleet_planning_context(page_size=1, client=mock_client)
+

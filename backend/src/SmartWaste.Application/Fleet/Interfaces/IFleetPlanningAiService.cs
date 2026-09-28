@@ -16,4 +16,8 @@ public interface IFleetPlanningAiService
     Task<FleetCompatibilityResultDto> CheckCompatibilityAsync(
         CheckFleetCompatibilityRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<OperationalValidationContextDto> GetOperationalValidationContextAsync(
+        GetOperationalValidationContextRequest request,
+        CancellationToken cancellationToken = default);
 }

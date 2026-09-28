@@ -157,4 +157,101 @@ public class FleetPlanningAiService : IFleetPlanningAiService
 
         return FleetWasteCompatibilityEvaluator.Evaluate(tasks, vehicle);
     }
+
+    public async Task<OperationalValidationContextDto> GetOperationalValidationContextAsync(
+        GetOperationalValidationContextRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        // 1. Fetch fresh task state for requested task IDs
+        var tasks = new List<OperationalValidationTaskDto>();
+        if (request.TaskIds.Any())
+        {
+            var taskEntities = await _db.CollectionTasks.AsNoTracking()
+                .Include(x => x.WasteReport)
+                .Include(x => x.WasteBin)
+                    .ThenInclude(x => x!.AcceptedWasteTypes)
+                .Where(x => request.TaskIds.Contains(x.Id))
+                .ToListAsync(cancellationToken);
+
+            var activeClaimTaskIds = await _db.CollectionAssignmentTaskClaims.AsNoTracking()
+                .Where(c => c.IsActive && request.TaskIds.Contains(c.CollectionTaskId))
+                .Select(c => c.CollectionTaskId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            tasks = taskEntities.Select(t => new OperationalValidationTaskDto
+            {
+                TaskId = t.Id,
+                TaskCode = t.TaskCode,
+                Status = t.Status.ToString(),
+                HasActiveAssignment = activeClaimTaskIds.Contains(t.Id)
+                    || t.Status == CollectionTaskStatus.Assigned
+                    || t.Status == CollectionTaskStatus.InProgress,
+                WasteTypes = t.WasteReport != null
+                    ? new[] { t.WasteReport.WasteType.ToString() }
+                    : (t.WasteBin != null && t.WasteBin.AcceptedWasteTypes.Any()
+                        ? t.WasteBin.AcceptedWasteTypes.Select(w => w.WasteType.ToString()).OrderBy(w => w).ToArray()
+                        : Array.Empty<string>())
+            }).ToList();
+        }
+
+        // 2. Fetch fresh driver state for requested driver IDs
+        var drivers = new List<OperationalValidationDriverDto>();
+        if (request.DriverIds.Any())
+        {
+            var occupiedDriverIds = await _db.CollectionAssignments.AsNoTracking()
+                .Where(x => (x.Status == CollectionAssignmentStatus.Assigned || x.Status == CollectionAssignmentStatus.InProgress)
+                         && request.DriverIds.Contains(x.DriverId))
+                .Select(x => x.DriverId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var driverProfiles = await _db.DriverProfiles.AsNoTracking()
+                .Include(x => x.User)
+                .Where(x => request.DriverIds.Contains(x.UserId))
+                .ToListAsync(cancellationToken);
+
+            drivers = driverProfiles.Select(p => new OperationalValidationDriverDto
+            {
+                DriverId = p.UserId,
+                DisplayName = p.User?.FullName ?? "Unknown",
+                AvailabilityStatus = p.AvailabilityStatus.ToString(),
+                IsOccupied = occupiedDriverIds.Contains(p.UserId)
+            }).ToList();
+        }
+
+        // 3. Fetch fresh vehicle state for requested vehicle IDs
+        var vehicles = new List<OperationalValidationVehicleDto>();
+        if (request.VehicleIds.Any())
+        {
+            var occupiedVehicleIds = await _db.CollectionAssignments.AsNoTracking()
+                .Where(x => (x.Status == CollectionAssignmentStatus.Assigned || x.Status == CollectionAssignmentStatus.InProgress)
+                         && request.VehicleIds.Contains(x.VehicleId))
+                .Select(x => x.VehicleId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+
+            var vehicleEntities = await _db.Vehicles.AsNoTracking()
+                .Include(x => x.SupportedWasteTypes)
+                .Where(x => request.VehicleIds.Contains(x.Id))
+                .ToListAsync(cancellationToken);
+
+            vehicles = vehicleEntities.Select(v => new OperationalValidationVehicleDto
+            {
+                VehicleId = v.Id,
+                RegistrationNumber = v.RegistrationNumber,
+                VehicleType = v.VehicleType.ToString(),
+                OperationalStatus = v.OperationalStatus.ToString(),
+                IsOccupied = occupiedVehicleIds.Contains(v.Id),
+                SupportedWasteTypes = v.SupportedWasteTypes.Select(w => w.WasteType.ToString()).OrderBy(w => w).ToArray()
+            }).ToList();
+        }
+
+        return new OperationalValidationContextDto
+        {
+            Tasks = tasks,
+            Drivers = drivers,
+            Vehicles = vehicles
+        };
+    }
 }

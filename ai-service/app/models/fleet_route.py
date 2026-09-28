@@ -1,7 +1,7 @@
 from typing import List, Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.models.fleet_resources import FleetCompatibilityStatus
 
@@ -59,16 +59,45 @@ class RecommendationCompatibility(BaseModel):
     issues: List[str] = Field(default_factory=list)
 
 
+class UnplannedTask(BaseModel):
+    """Authoritative Scheduled task not included in a dispatch plan, with advisory reason."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    task_id: UUID = Field(alias="taskId")
+    task_code: Optional[str] = Field(default=None, alias="taskCode")
+    reason: str = Field(min_length=5, max_length=500)
+
+
+class DispatchPlanRecommendation(BaseModel):
+    """Independent advisory dispatch plan pairing one driver, one vehicle, and a sequence of tasks."""
+
+    model_config = ConfigDict(populate_by_name=True, extra="forbid")
+
+    plan_id: str = Field(alias="planId", min_length=3, max_length=80, pattern=r"^plan-[1-9][0-9]*$")
+    recommended_driver: DriverRecommendation = Field(
+        validation_alias=AliasChoices("recommendedDriver", "driver"),
+        serialization_alias="recommendedDriver",
+    )
+    recommended_vehicle: VehicleRecommendation = Field(
+        validation_alias=AliasChoices("recommendedVehicle", "vehicle"),
+        serialization_alias="recommendedVehicle",
+    )
+    recommended_tasks: List[RecommendedFleetTask] = Field(alias="recommendedTasks", min_length=1)
+    compatibility: Optional[RecommendationCompatibility] = None
+    rationale: str = Field(min_length=5, max_length=500)
+    warnings: List[str] = Field(default_factory=list, max_length=10)
+
+
 class _StructuredFleetRoutePayload(BaseModel):
     """Internal schema for model output parsing."""
 
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
-    recommended_tasks: List[RecommendedFleetTask] = Field(default_factory=list, alias="recommendedTasks")
-    recommended_driver: Optional[DriverRecommendation] = Field(default=None, alias="recommendedDriver")
-    recommended_vehicle: Optional[VehicleRecommendation] = Field(default=None, alias="recommendedVehicle")
+    dispatch_plans: List[DispatchPlanRecommendation] = Field(default_factory=list, alias="dispatchPlans")
+    unplanned_tasks: List[UnplannedTask] = Field(default_factory=list, alias="unplannedTasks")
     warnings: List[str] = Field(default_factory=list, max_length=15)
-    rationale: str
+    rationale: str = Field(min_length=5, max_length=500)
 
 
 class FleetRouteResult(BaseModel):
@@ -77,11 +106,9 @@ class FleetRouteResult(BaseModel):
     model_config = ConfigDict(populate_by_name=True, extra="forbid")
 
     objective: str
-    recommended_tasks: List[RecommendedFleetTask] = Field(default_factory=list, alias="recommendedTasks")
-    recommended_driver: Optional[DriverRecommendation] = Field(default=None, alias="recommendedDriver")
-    recommended_vehicle: Optional[VehicleRecommendation] = Field(default=None, alias="recommendedVehicle")
-    compatibility: Optional[RecommendationCompatibility] = None
-    warnings: List[str] = Field(default_factory=list)
+    dispatch_plans: List[DispatchPlanRecommendation] = Field(default_factory=list, alias="dispatchPlans")
+    unplanned_tasks: List[UnplannedTask] = Field(default_factory=list, alias="unplannedTasks")
+    warnings: List[str] = Field(default_factory=list, max_length=100)
     rationale: str
 
     source_task_page: int = Field(alias="sourceTaskPage")
@@ -89,7 +116,7 @@ class FleetRouteResult(BaseModel):
     source_task_total_count: int = Field(alias="sourceTaskTotalCount")
     source_task_total_pages: int = Field(alias="sourceTaskTotalPages")
 
-    agent_name: str = Field(alias="agentName")
+    agent_name: str = Field(default="fleet_route_agent", alias="agentName")
     model_name: Optional[str] = Field(default=None, alias="modelName")
     advisory_only: Literal[True] = Field(default=True, alias="advisoryOnly")
     status: Literal["completed", "empty"]
