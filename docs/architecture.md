@@ -73,7 +73,7 @@ The application is decomposed into four cohesive business components, each match
 | :--- | :--- | :--- | :--- |
 | **1. Waste Reporting & Citizen Management** | Citizen waste issue reporting, photo uploads, officer field verification, and citizen engagement. | **Citizen** (Public)<br>**WasteOfficer** (Field) | **Flutter** (Citizen)<br>**React** (Officer) |
 | **2. Waste Collection & Bin Management** | Public roadside bin registry, accepted waste streams, manual observation tracking (discrete 0–100% fill levels & physical condition), derived collection needs queue (Sources A, B, C), and atomic collection task scheduling. | **WasteOfficer** (Management)<br>**Citizen** (Discovery) | **React** (Officer)<br>**Flutter** (Citizen) |
-| **3. Fleet, Driver & Route Management** | Collection vehicle inventory, driver duty tracking, vehicle/driver dispatch assignment, route optimization, and waypoint execution. | **Driver**<br>**WasteOfficer** | **Flutter** (Driver)<br>**React** (Officer) |
+| **3. Fleet, Driver & Route Management** | Manager-owned vehicle records, automatically maintained Driver availability profiles, WasteOfficer manual multi-task assignments, task-linked route stops, and Driver execution. Manual ordering is the operational baseline; road-aware routing is a separately approved future integration. | **MunicipalManager**<br>**WasteOfficer**<br>**Driver** | **React** (Manager/Officer)<br>**Flutter** (Driver) |
 | **4. Operations, Complaints & Analytics** | Citizen grievances, operational field incidents, notifications, multi-agent AI approval workflows, and executive analytics. | **MunicipalManager**<br>**Citizen** | **React** (Manager)<br>**Flutter** (Citizen) |
 
 ---
@@ -104,15 +104,14 @@ public static class AppRoles
    - Manages municipal roadside bin registry (registration, operational metadata updates, deactivation).
    - Records manual field bin observations (fill levels and physical condition).
    - Reviews the unified municipal collection needs queue (Sources A, B, and C with active task suppression).
-   - Dispatches single-location collection tasks manually and reschedules unstarted collection tasks.
+   - Creates ordinary manual assignments from existing Scheduled C2 tasks, manually orders their task-linked route stops, cancels only unstarted assignments, and reviews/replaces failed collection work.
    - Initiates AI planning workflows.
 3. **`Driver`**:
    - Manages personal duty availability (`Available`, `OffDuty`).
-   - Receives and accepts `CollectionAssignment` dispatches in the mobile app.
-   - Executes navigational route stops, updating statuses (`Arrived`, `Completed`, `Skipped`).
-   - Reports `OperationalIncident` events (breakdown, access blockage).
+   - Sees only own assignments, starts own assigned run, and completes or fails individual task-linked stops.
+   - Can record an authorised genuine post-collection bin observation for an own completed bin stop; cannot reassign, transfer, or cancel work.
 4. **`MunicipalManager`**:
-   - Senior administrative supervisor.
+   - Senior administrative supervisor who manages vehicle records and can view Driver operational availability and derived occupancy.
    - Reviews and adjudicates escalated complaints and operational incidents.
    - Reviews AI workflow recommendations and holds sole authority to execute `AiApproval` (`Approved`, `Rejected`, `RevisionRequested`).
    - Accesses high-level aggregated operational analytics.
@@ -190,8 +189,8 @@ Both client applications are built to serve specific user roles while sharing id
 - **Key Modules:**
   - Authentication & Role Guarding (`ProtectedRoute`, `RoleRoute`).
   - Verification Dashboard: Review citizen waste reports with photo attachments.
-  - Bin & Schedule Manager: Interactive zone management and schedule generator.
-  - Fleet & Dispatch Console: Driver assignments and live vehicle operational states.
+  - Bin & Collection Task Manager: C2 bin/task workflows and collection-needs review.
+  - Fleet & Dispatch Console: MunicipalManager vehicle/driver administration; WasteOfficer assignment creation, manual route ordering, run monitoring, and failed-task replacement review.
   - AI Review Portal: Human-in-the-loop review interface displaying structured AI recommendations, route metrics, and approval/rejection actions.
 - **Security:** JWT stored securely in memory / local session storage with automatic Bearer token injection via Axios interceptors.
 
@@ -205,10 +204,17 @@ Both client applications are built to serve specific user roles while sharing id
     - Service complaint filing.
   - Driver Mode:
     - Shift availability toggle (`Available` / `OffDuty`).
-    - Assigned task list and route waypoint navigator.
-    - Stop status updater (`Arrived`, `Completed`, `Skipped`).
-    - One-tap operational incident logger.
+    - Own assignment list, ordered task-linked stops, and external navigation for one saved stop destination.
+    - Start-run, complete-stop, fail-stop-with-reason, and assignment-finalization actions scoped from the authenticated Driver identity.
+    - Optional append-only post-collection bin observation for an authorised own completed bin stop.
 - **Security:** Access tokens stored strictly in hardware-backed `FlutterSecureStorage`. Base URL dynamically configurable (`10.0.2.2:5276` for Android Emulator, LAN IP for physical device via `--dart-define=API_BASE_URL=...`).
+
+### 6.3 Component 3 client integration contract
+
+- React and Flutter communicate only with ASP.NET Core; neither client calls a routing provider, FastAPI, or PostgreSQL directly.
+- React exposes manager-only resource administration separately from WasteOfficer assignment operations. Driver availability, vehicle operational state, task eligibility, claim occupancy, waste compatibility, and every status transition are revalidated by ASP.NET Core.
+- Flutter Driver screens receive only the authenticated Driver’s assignment projection. Execution commands derive the Driver identity from the JWT and never trust a client-supplied driver ID.
+- The route view always supports the stored manual order. It may display provider geometry, duration, distance, or a suggested order only after an approved server-side provider has actually returned verified data; provider failure preserves manual ordering.
 
 ---
 
@@ -262,7 +268,7 @@ flowchart TD
     
     WasteAgent["2. Waste Analysis Agent\n(Student 1: Component 1)\nEvaluates waste type & recommends priority"]
     CollectionAgent["3. Collection Planning Agent\n(Student 2: Component 2)\nEvaluates bin fullness & zones"]
-    FleetAgent["4. Fleet & Route Agent\n(Student 3: Component 3)\nOptimizes vehicle & route sequence"]
+    FleetAgent["4. Fleet & Route Agent\n(Student 3: Component 3)\nProposes advisory allocation & stop order"]
     ValidationAgent["5. Validation & Operations Agent\n(Student 4: Component 4)\nChecks capacity, driver status & SLA"]
 
     Deterministic["ASP.NET Core:\nDeterministic Business Rule Verification"]
@@ -313,8 +319,10 @@ To ensure distinct individual academic contributions while maintaining architect
    - **Safety Boundaries:** Respects active task suppression, administrative bin availability, and deterministic weekday schedules.
    - **Planner Delegation:** Shared Planner Agent will delegate collection needs evaluation to this specialized agent in multi-agent workflows.
 4. **Fleet & Route Agent (Student 3 — Component 3)**:
-   - Evaluates available vehicles matching required capacity and waste type.
-   - Performs route planning/optimization for waypoints to minimize travel time.
+   - **Responsibility:** Evaluates already Scheduled tasks against current eligible Driver/Vehicle resources and proposes advisory allocation and stop-order candidates.
+   - **Future read-only tool boundary:** Receives only sanitized task IDs/locations, target type, authoritative reason, scheduled time, known handling requirements, opaque eligible-driver references with occupancy, and vehicle status/capacity-in-litres/supported waste types. Verified routing metrics are included only after an approved routing service supplies them.
+   - **Safety boundaries:** Has no database connection or write tools; cannot assign, dispatch, approve, change task state, override backend availability, claim vehicle capacity feasibility, or describe a manual/coordinate order as road-optimised. It exposes no citizen identity, Driver licence/contact data, credentials, or unrelated records.
+   - **Advisory semantics:** Manual WasteOfficer assignments never require Gemini. Any future AI-driven operational change requires the shared workflow’s MunicipalManager approval and fresh ASP.NET Core validation before execution.
 5. **Validation & Operations Agent (Student 4 — Component 4)**:
    - Pre-evaluates operational feasibility against historical SLA metrics.
    - Validates that proposal adheres to municipal collection guidelines.
@@ -337,12 +345,11 @@ The integration of generative and agentic AI is bounded by strict software engin
      - Single-target XOR constraint: each `CollectionTask` targets strictly EITHER a `WasteReport` OR a `WasteBin`.
      - Reason consistency: Report tasks require `VerifiedReport` reason; `OfficerDiscretion` is permitted strictly for `WasteBin` targets and mandates a non-empty `SchedulingReason` (distinct from optional operational `HandlingNotes`).
      - No duplicate active `CollectionTask` for the same target (enforced via partial unique indexes on active statuses `Scheduled`, `Assigned`, `InProgress`).
-     - Selected `Driver` must be in `Available` status.
-     - Selected `Vehicle` must be in `Available` status.
-     - No overlapping active `CollectionAssignment` for the selected driver or vehicle.
-     - Total estimated load must not exceed vehicle load capacity.
+     - Selected Driver must hold the `Driver` role, have an automatically maintained internal `DriverProfile`, be `Available`, and have no unfinished assignment; selected Vehicle must be operationally `Available` and unoccupied. Driver availability is Driver-controlled, and an already assigned Driver retains execution authority after changing to `OffDuty`.
+     - One active assignment task claim per CollectionTask and one unfinished assignment per Driver/Vehicle are enforced through direct-row PostgreSQL partial unique indexes plus transaction-time revalidation.
+     - Known waste incompatibility blocks assignment. Missing or ambiguous compatibility requires a recorded WasteOfficer acknowledgement and never asserts load, compartments, or vehicle-capacity feasibility.
      - Terminal task immutability: `Completed`, `Cancelled`, and `Failed` are terminal historical records. `Failed` tasks never revert or resolve linked reports and cannot be mutated to `Cancelled`.
-     - Replacement boundaries: Report-task reopening and replacement following failure or cancellation is a reserved future C3/C1 integration decision (no reverse status transitions exist). Bin-targeted replacement following failure requires explicit WasteOfficer review (unresolved future operation). No operational report-task cancellation endpoint is exposed in C2.
+     - Failed-task replacement creates a new task only through the dedicated C3 reviewed replacement command. It preserves Failed history; report replacement moves the still-in-progress report back to Scheduled rather than to Verified. Unstarted assignment cancellation explicitly requeues Assigned tasks to Scheduled and never cancels them.
 3. **Human-in-the-Loop (HITL) for High-Impact Actions**:
    - High-impact AI recommendations (automated batch collection dispatch, vehicle route generation) require explicit `MunicipalManager` approval in the React web app (`POST /api/v1/ai/workflows/{id}/decision`) before database commit.
    - Deterministic manual operational scheduling: `WasteOfficer` can create single-target collection tasks directly (`POST /api/v1/collection-tasks/manual`) and reschedule unstarted tasks (`POST /api/v1/collection-tasks/{id}/reschedule`) without AI workflow involvement.
@@ -357,7 +364,7 @@ The integration of generative and agentic AI is bounded by strict software engin
 ## 10. Future Integrations (Third-Party Services)
 
 Future development phases will incorporate external services under strict encapsulation:
-- **Routing & Maps**: Turn-by-turn routing, distance matrices, and polyline generation will be integrated in ASP.NET Core / Python AI service. Third-party API keys (e.g., Google Maps, Mapbox, or OSRM) will remain private on the backend and never exposed to React or Flutter clients.
+- **Routing & Maps**: Manual C3 stop ordering is fully usable without a provider. A future separately approved server-side routing provider may calculate road geometry, distance, duration, or a suggested multi-stop order according to its actual capabilities. Calculating a route for a supplied order is not optimisation. Any provider key remains private to the backend; React and Flutter never call it directly and retain manual ordering when it is unavailable.
 - **Object Storage**: Photographic attachments (`ReportAttachment`) will be persisted using secure cloud storage (e.g., S3/Blob) or managed municipal storage with pre-signed upload URLs.
 - **Push Notifications**: Firebase Cloud Messaging (FCM) or Apple APNs will be integrated into ASP.NET Core for mobile alert dispatch.
 

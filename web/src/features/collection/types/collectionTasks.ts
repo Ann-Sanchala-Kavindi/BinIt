@@ -30,8 +30,16 @@ export interface CollectionTaskDetailDto {
   createdAt: string;
   updatedAt: string | null;
   targetSummary: CollectionTaskTargetSummaryDto;
+  statusHistory?: CollectionTaskStatusHistoryDto[];
+  scheduleHistory?: CollectionTaskScheduleHistoryDto[];
 }
 export interface RescheduleCollectionTaskRequest { newScheduledAt: string; reason: string; }
+export interface CreateReplacementCollectionTaskRequest {
+  scheduledAt: string;
+  replacementReason: string;
+  handlingNotes?: string | null;
+  schedulingReason?: string | null;
+}
 export interface CollectionTaskStatusHistoryDto { id: string; fromStatus: string | null; toStatus: string; changedByUserId: string | null; changedByUserName: string | null; notes: string | null; changedAt: string; }
 export interface CollectionTaskScheduleHistoryDto { id: string; previousScheduledAt: string; newScheduledAt: string; reason: string; rescheduledByUserId: string; rescheduledByUserName: string | null; rescheduledAt: string; }
 export interface CollectionTaskAuditTrailDto { collectionTaskId: string; taskCode: string; statusHistory: CollectionTaskStatusHistoryDto[]; scheduleHistory: CollectionTaskScheduleHistoryDto[]; }

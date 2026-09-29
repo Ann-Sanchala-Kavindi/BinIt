@@ -18,6 +18,11 @@ void main() {
       expect(ApiConstants.login, '/auth/login');
       expect(ApiConstants.me, '/auth/me');
       expect(ApiConstants.changePassword, '/auth/change-password');
+      expect(ApiConstants.driverProfile('drv-1'), '/drivers/drv-1');
+      expect(ApiConstants.driverAvailability, '/drivers/me/availability');
+      expect(ApiConstants.myAssignments, '/assignments/mine');
+      expect(ApiConstants.assignmentDetail('asg-1'), '/assignments/asg-1');
+      expect(ApiConstants.routeDetail('rt-1'), '/routes/rt-1');
     });
 
     test('network timeouts are set to 15 seconds', () {

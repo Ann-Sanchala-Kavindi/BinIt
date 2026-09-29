@@ -26,6 +26,7 @@ export const defaultOfficerNavItems: NavItem[] = [
   { label: 'Bin Management', to: '/officer/bins', icon: <BinsIcon /> },
   { label: 'Collection Needs', to: '/officer/schedules', icon: <SchedulesIcon /> },
   { label: 'Collection Tasks', to: '/officer/tasks', icon: <TasksIcon /> },
+  { label: 'Dispatch & Routes', to: '/officer/dispatch', icon: <FleetIcon /> },
   { label: 'Complaints', to: '/officer/complaints', icon: <ComplaintsIcon /> },
 ];
 

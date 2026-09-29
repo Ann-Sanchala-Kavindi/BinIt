@@ -20,10 +20,12 @@ namespace SmartWaste.Api.Controllers.Collection;
 public class CollectionTasksController : ControllerBase
 {
     private readonly ICollectionTaskService _collectionTaskService;
+    private readonly IAssignmentReadService _assignmentReadService;
 
-    public CollectionTasksController(ICollectionTaskService collectionTaskService)
+    public CollectionTasksController(ICollectionTaskService collectionTaskService, IAssignmentReadService assignmentReadService)
     {
         _collectionTaskService = collectionTaskService;
+        _assignmentReadService = assignmentReadService;
     }
 
     /// <summary>
@@ -50,6 +52,14 @@ public class CollectionTasksController : ControllerBase
 
         var result = await _collectionTaskService.GetListAsync(query, actorUserId, actorRole, cancellationToken);
         return Ok(result);
+    }
+
+    [HttpGet("available-for-assignment")]
+    [Authorize(Roles = $"{AppRoles.WasteOfficer},{AppRoles.MunicipalManager}")]
+    public async Task<IActionResult> GetAvailableForAssignment([FromQuery] AvailableAssignmentTaskQuery query, CancellationToken cancellationToken)
+    {
+        if (!TryGetActor(out var actorUserId, out var actorRole, out var errorResult)) return errorResult!;
+        return Ok(await _assignmentReadService.GetAvailableTasksAsync(query, actorUserId, actorRole, cancellationToken));
     }
 
     /// <summary>
@@ -103,6 +113,24 @@ public class CollectionTasksController : ControllerBase
         }
 
         var result = await _collectionTaskService.CreateManualTaskAsync(request, actorUserId, actorRole, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+    }
+
+    [HttpPost("{failedTaskId:guid}/replacement")]
+    [Authorize(Roles = AppRoles.WasteOfficer)]
+    [ProducesResponseType(typeof(CollectionTaskDetailDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> CreateReplacementTask(
+        [FromRoute] Guid failedTaskId,
+        [FromBody] CreateReplacementCollectionTaskRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetActor(out var actorUserId, out var actorRole, out var errorResult)) return errorResult!;
+        var result = await _collectionTaskService.CreateReplacementTaskAsync(failedTaskId, request, actorUserId, actorRole, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 

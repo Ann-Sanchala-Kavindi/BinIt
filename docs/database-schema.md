@@ -66,20 +66,21 @@ One-to-one extension for users holding the `Citizen` role. *(Deferred — not re
 ---
 
 ### 2.3 `DriverProfile`
-One-to-one extension for users holding the `Driver` role.
+Internal one-to-one availability extension automatically maintained for users holding the `Driver` role. It is not a separately registered or Manager-administered Driver record.
 
 | Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
 | `UserId` | `Guid` | No | PK & FK to `AppUser.Id` (Cascade delete). |
-| `LicenseNumber` | `string` | No | Heavy/commercial vehicle driver license number (`varchar(50)`). **Unique**. |
+| `LicenseNumber` | `string` | Yes | Historical heavy/commercial vehicle driver licence number (`varchar(50)`). Non-null historical values remain unique; it is not required for Driver operations. |
 | `AvailabilityStatus`| `string` | No | Availability state (`varchar(30)`). Default: `Available`. |
 | `CreatedAt` | `DateTime` | No | UTC timestamp of profile creation. |
 | `UpdatedAt` | `DateTime` | Yes | UTC timestamp of last modification. |
 
 #### Driver Availability Status Lifecycle
-- `Available`: Driver is on duty and eligible for a collection assignment.
-- `Assigned`: Driver has an active task/assignment in progress.
+- `Available`: Driver is on duty and may receive a new collection assignment when not occupied.
 - `OffDuty`: Driver is off work, on leave, or inactive.
+
+Assignment occupancy is derived from unfinished `CollectionAssignment` rows; it is not an availability status.
 
 ---
 
@@ -522,129 +523,138 @@ $$\text{WasteReport (Verified)} + \text{New CollectionTask (Scheduled)} \xrighta
 
 ---
 
-### 4.11 Terminal Outcomes & Failed Task Replacement Boundary
+### 4.11 C3 Execution, Terminal Outcomes, Requeue, and Replacement Contract
 
-- **Terminal Historical Task Statuses:**
-  - `Completed`: Work cleared and verified by C3. Terminal historical status.
-  - `Cancelled`: Task explicitly aborted prior to operational execution. Terminal historical status.
-  - `Failed`: Driver or crew encountered an insurmountable impediment (e.g. road blocked, inaccessible site, hazardous condition). Terminal historical audit record.
+`Completed`, `Failed`, and `Cancelled` remain terminal historical `CollectionTask` states. A Failed task is never changed to `Cancelled` or back to `Scheduled`; all C3 execution operations append the existing `CollectionTaskStatusHistory` record with server UTC time and the authenticated actor.
 
-#### Failed & Cancelled Task Rules:
-1. **Terminal Audit Immutability:**
-   - A `Failed` task is a permanent historical audit record. It must NEVER be changed to `Cancelled` merely to bypass unique indexes or enable replacement.
-2. **No Automatic State Reversion:**
-   - A task failure does NOT automatically resolve or reopen its linked `WasteReport`, and does NOT silently revert `WasteReport.Status` to `Verified`.
-3. **Report-Targeted Failed/Cancelled Tasks (Reserved Future C3/C1 Decision):**
-   - Initial manual report-task scheduling (`POST /api/v1/collection-tasks/manual`) strictly requires a report in status `Verified`.
-   - The existing C1 lifecycle has NO approved reverse transition from `Scheduled` or `InProgress` back to `Verified`. C2 does not invent reverse status transitions.
-   - Therefore, `POST /api/v1/collection-tasks/manual` CANNOT be used as an immediate replacement path for a report currently in `Scheduled` or `InProgress`.
-   - The operational mechanism for reopening a report, resolving failed collection attempts, or authorizing replacement work is explicitly a **RESERVED FUTURE C3/C1 INTEGRATION DECISION**.
-   - Unrestricted duplicate task creation for the same report is strictly prohibited by `IX_CollectionTasks_WasteReportId_Active` and the `Verified`-only status guard.
-4. **Bin-Targeted Failed Tasks (Unresolved Future Operation):**
-   - Explicit WasteOfficer review is a mandatory prerequisite before any replacement collection task may be authorized for a roadside bin.
-   - Because the approved C2 design does not yet define how that operational review is formally recorded and enforced (e.g., dedicated review acknowledgment entity or review gate), bin-task replacement following a failure is documented as an **UNRESOLVED FUTURE OPERATION**.
-   - The fact that `Failed` is excluded from the active-task unique index (`IX_CollectionTasks_WasteBinId_Active`) ensures database-level historical coexistence, but does NOT by itself constitute authorization for automatic or immediate task replacement.
-5. **No Dangerous Operational Task Cancellation in C2:**
-   - C2 does NOT expose an operational report-task cancellation endpoint that could leave a linked `WasteReport` stranded indefinitely in `Scheduled` status without an approved follow-up path.
-   - Task cancellation rules affecting linked waste reports are deferred to future C3/C1 integration.
+#### Required C3 atomic transitions
+
+1. **Assignment:** C3 assigns only existing `Scheduled` tasks. It changes each task to `Assigned`, writes task history, creates the assignment, route, stops, and active claims atomically. A report remains `Scheduled` at this stage.
+2. **Start:** Starting an assigned run changes each remaining assigned task to `InProgress`. For each report-targeted task, the authoritative C3/C1 service boundary also changes the report `Scheduled → InProgress` and writes `WasteReportStatusHistory` in the same transaction.
+3. **Successful stop:** Completing a report task changes it to `Completed`, changes its report `InProgress → Resolved`, and writes both histories atomically. Completing a bin task changes it to `Completed` and sets `WasteBin.LastCollectedAt = UtcNow` atomically. Completion never fabricates a `BinObservation`.
+4. **Failed stop:** Failing a stop requires a non-empty reason; it changes only that task to `Failed`, preserves the source report without a false `Resolved` transition, and leaves other stops executable. A failed task remains historical and auditable.
+5. **Assignment finalization:** Only when every stop is `Completed` or `Failed` may C3 set the assignment to `Completed` (all completed), `PartiallyCompleted` (mixed), or `Failed` (all failed), with assignment history.
+6. **Unstarted cancellation/requeue:** Only an `Assigned` assignment may be cancelled. In one transaction each still-Assigned task changes `Assigned → Scheduled`, receives a task history entry, and retains its existing `ScheduledAt`; the assignment becomes `Cancelled`, its claims are released, and driver/vehicle occupancy is released. Underlying tasks are not cancelled.
+
+#### Replacement tasks after failure
+
+Initial scheduling through `POST /api/v1/collection-tasks/manual` remains restricted to a report in `Verified` status and is not a replacement operation.
+
+- **Report target:** the dedicated C3 replacement command requires the original task to be terminal `Failed`, the same source report to still be in `InProgress`, no active task/claim for that report, and a 5–500 character replacement reason. It creates a **new** `Scheduled` task and changes the report `InProgress → Scheduled`, recording a C1 history note that identifies both the failed and replacement task codes. It never resets the report to `Verified` and never changes the failed task.
+- **Bin target:** the dedicated C3 replacement command requires a terminal Failed original bin task, authenticated WasteOfficer action, a 5–500 character replacement reason, no active task/claim, an active bin, and fresh authoritative revalidation that collection is still needed for the original collection reason. It creates a **new** Scheduled task and retains the failed task/history. No separate review entity or close-review workflow is introduced in the initial release; the replacement command itself is the required recorded officer review.
+
+#### Post-collection bin state
+
+`LastCollectedAt` means collection completion, not an observed fill level. The current collection-need service treats an observation recorded on or before `LastCollectedAt` as pre-collection and therefore not an acute full/blocked trigger; routine eligibility is recalculated using the configured municipality-local date. Public availability still follows the existing precedence and freshness rules: it is not promised to be `Usable` or empty after collection unless a qualifying fresh observation supports that conclusion. A Driver may later append a genuine, authorised post-collection observation through the C3-scoped C2 observation operation; its timestamp and actor remain server-derived.
 
 ---
 
 ## 5. Component 3 — Fleet, Driver & Route Management
 
-### 5.1 `Vehicle`
-Municipal collection truck or compactor vehicle.
+> **Contract status:** Planned. These entities extend the implemented single-target `CollectionTask` model; they do not replace it. All timestamps are UTC (`timestamptz`) and all identifiers are `Guid`/`uuid` unless stated otherwise.
+
+### 5.1 `DriverProfile`
+One-to-one internal availability extension automatically created and backfilled for an existing `AppUser` in the `Driver` role. Driver identity and authentication remain ASP.NET Core Identity responsibilities; a profile is never a second account or a Manager-administered registration step.
 
 | Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
-| `Id` | `Guid` | No | Primary Key (`uuid`). |
-| `RegistrationNumber` | `string` | No | License plate / registration code (`varchar(50)`). **Unique**. |
-| `VehicleType` | `string` | No | Type (`Compactor`, `Flatbed`, `Tipper`, `SmallVan`) (`varchar(50)`). |
-| `Capacity` | `double` | No | Maximum load capacity in kilograms or cubic meters. |
-| `Status` | `string` | No | Operational readiness (`varchar(50)`). Default: `Available`. |
-| `CreatedAt` | `DateTime` | No | UTC creation timestamp. |
-| `UpdatedAt` | `DateTime` | Yes | UTC timestamp of last update. |
+| `UserId` | `Guid` | No | PK and FK to `AppUser.Id` (cascade delete). |
+| `LicenseNumber` | `string` | Yes | Historical municipal commercial-driver licence identifier (`varchar(50)`). Existing non-null values remain unique; a new internal profile stores `NULL`. |
+| `AvailabilityStatus` | `string enum` | No | Driver-declared duty indication. Default `Available`. |
+| `IsEligible` | `bool` | No | Legacy historical administrative value, retained but not used as a dispatch gate. |
+| `EligibilityNotes` | `string` | Yes | Legacy historical administrative notes, retained but not used by active workflows. |
+| `CreatedAt` | `DateTime` | No | Profile creation time. |
+| `UpdatedAt` | `DateTime` | Yes | Last administrative or availability update. |
 
-#### Vehicle Status Values
-- `Available`: Ready for operational assignment.
-- `Assigned`: Currently assigned to an active route.
-- `Maintenance`: Under repair or scheduled service.
-- `Inactive`: Out of fleet service permanently.
+`AvailabilityStatus` is `Available` or `OffDuty`. It is not an occupancy flag: a Driver with an unfinished assignment cannot use an availability change to release that assignment. A new assignment requires a Driver-role account with its internal profile, `AvailabilityStatus == Available`, and no unfinished assignment; legacy `IsEligible` does not gate dispatch. An assigned Driver retains established execution authority if they later become `OffDuty`.
 
----
+### 5.2 `Vehicle` and `VehicleSupportedWasteType`
+Municipal fleet resource. Capacity is always recorded in **litres** in this initial contract; it is reference information only and is not a task-load estimate.
 
-### 5.2 `CollectionAssignment`
-Binds a `CollectionTask`, a qualified `Driver`, and a suitable `Vehicle`.
+| `Vehicle` Field | Type | Nullable | Description |
+| :--- | :--- | :--- | :--- |
+| `Id` | `Guid` | No | Primary key. |
+| `RegistrationNumber` | `string` | No | Fleet/legal identifier (`varchar(50)`, unique). |
+| `VehicleType` | `string enum` | No | `Compactor`, `Flatbed`, `Tipper`, or `SmallVan`. |
+| `CapacityLiters` | `int` | No | Positive recorded vehicle capacity in litres. |
+| `OperationalStatus` | `string enum` | No | `Available`, `Maintenance`, or `Inactive`. Default `Available`. |
+| `Notes` | `string` | Yes | Administrative notes (`varchar(1000)`). |
+| `CreatedAt` / `UpdatedAt` | `DateTime` | No / Yes | Audit timestamps. |
+
+`VehicleSupportedWasteType` is structured compatibility data: `VehicleId` (FK, cascade delete), `WasteType` (the existing shared waste-type enum), and composite PK `(VehicleId, WasteType)`. A vehicle is not manually marked `Assigned`; its current occupancy is derived from an unfinished `CollectionAssignment`.
+
+For the simple MVP, compatibility is classified from recorded type metadata only: a report is `Compatible` when its single recorded `WasteType` is supported and `Incompatible` when it is not; a bin is `Incompatible` only when its non-empty accepted-type set has no overlap with the vehicle’s supported set. Missing bin types, or a bin whose accepted types both overlap and differ from vehicle support, are `RequiresConfirmation` because accepted types do not prove the actual mixed contents. This classification never estimates volume or compartments.
+
+### 5.3 `CollectionAssignment`, history, and task claims
+An assignment groups multiple existing **Scheduled** C2 tasks for one Driver and one Vehicle. It contains no second time-window or target model; each underlying task keeps its own authoritative `ScheduledAt`, report/bin XOR target, collection reason, and C2 histories.
+
+| `CollectionAssignment` Field | Type | Nullable | Description |
+| :--- | :--- | :--- | :--- |
+| `Id` | `Guid` | No | Primary key. |
+| `DriverId` | `Guid` | No | FK to `DriverProfile.UserId` / `AppUser.Id` (restrict delete). |
+| `VehicleId` | `Guid` | No | FK to `Vehicle.Id` (restrict delete). |
+| `AssignedByUserId` | `Guid` | No | FK to the authenticated WasteOfficer who created the ordinary manual assignment (restrict delete). |
+| `Status` | `string enum` | No | Assignment lifecycle; default `Assigned`. |
+| `CompatibilityAcknowledgement` | `string` | Yes | Required 5–500 character officer confirmation only when backend classifies the selected work as unknown or ambiguous compatibility. |
+| `CompatibilityAcknowledgedByUserId` / `CompatibilityAcknowledgedAt` | `Guid` / `DateTime` | Yes | Actor and time for the required acknowledgement. |
+| `AssignedAt`, `StartedAt`, `FinalizedAt`, `CancelledAt` | `DateTime` | No / Yes / Yes / Yes | Lifecycle timestamps. |
+| `CancellationReason` | `string` | Yes | Required 5–500 characters only for an unstarted cancellation. |
+| `CreatedAt` / `UpdatedAt` | `DateTime` | No / Yes | Audit timestamps. |
+
+Assignment statuses are `Assigned`, `InProgress`, `Completed`, `PartiallyCompleted`, `Failed`, and `Cancelled`. `Assigned` and `InProgress` are unfinished; all other states are terminal. There is no `Accepted`, `Skipped`, or driver transfer state.
+
+`CollectionAssignmentStatusHistory` records every assignment transition: `Id`, `CollectionAssignmentId` (FK, cascade delete), nullable `FromStatus`, `ToStatus`, `ChangedByUserId` (FK AppUser, restrict delete), optional `Notes` (max 500), and `ChangedAt`.
+
+`CollectionAssignmentTaskClaim` is the concrete, auditable assignment/task link:
 
 | Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
-| `Id` | `Guid` | No | Primary Key (`uuid`). |
-| `CollectionTaskId`| `Guid` | No | FK to `CollectionTask.Id` (Restrict delete). |
-| `DriverId` | `Guid` | No | FK to `AppUser.Id` (holding `DriverProfile`). |
-| `VehicleId` | `Guid` | No | FK to `Vehicle.Id` (Restrict delete). |
-| `AssignedByUserId`| `Guid` | No | FK to `AppUser.Id` (WasteOfficer or MunicipalManager). |
-| `AssignedAt` | `DateTime` | No | UTC timestamp when assigned. |
-| `Status` | `string` | No | Assignment state (`varchar(50)`). Default: `Assigned`. |
-| `CompletedAt` | `DateTime` | Yes | UTC timestamp when completed. |
+| `Id` | `Guid` | No | Primary key. |
+| `CollectionAssignmentId` | `Guid` | No | FK to `CollectionAssignment.Id` (restrict delete). |
+| `CollectionTaskId` | `Guid` | No | FK to existing `CollectionTask.Id` (restrict delete). |
+| `IsActive` | `bool` | No | True while the task is claimed by an unfinished assignment; released only on terminal task handling or assignment cancellation. |
+| `ClaimedAt` / `ReleasedAt` | `DateTime` | No / Yes | Claim lifecycle timestamps. |
+| `ReleasedByUserId` | `Guid` | Yes | FK to actor releasing a claim (restrict delete). |
+| `ReleaseReason` | `string` | Yes | Audit reason for terminal release or cancellation requeue (max 500). |
 
-#### Assignment Status Values
-- `Assigned`: Dispatched to driver, visible in mobile app.
-- `Accepted`: Driver accepted duty in mobile app.
-- `InProgress`: Driver started navigation/collection.
-- `Completed`: Collection completed and verified.
-- `Cancelled`: Assignment aborted or reassigned.
+Historical claims are retained. Cancelling an unstarted assignment marks its claims inactive only after the associated task requeue and history writes succeed; it does not delete tasks, stops, claims, or histories.
 
-#### Deterministic Assignment Constraints
-- A driver cannot have more than one assignment in status `Assigned`, `Accepted`, or `InProgress` concurrently.
-- A vehicle cannot have more than one assignment in status `Assigned`, `Accepted`, or `InProgress` concurrently.
+### 5.4 `Route` and `RouteStop`
+Every assignment has one route containing its ordered task stops. The route is the assignment’s ordering and optional verified-routing result; task lifecycle remains authoritative in `CollectionTask`.
 
----
-
-### 5.3 `Route`
-Optimized navigational path calculated for a `CollectionAssignment`.
-
-| Field | Type | Nullable | Description |
+| `Route` Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
-| `Id` | `Guid` | No | Primary Key (`uuid`). |
-| `CollectionAssignmentId` | `Guid` | No | FK to `CollectionAssignment.Id` (Cascade delete). |
-| `ExternalRouteReference` | `string` | Yes | Reference ID from routing engine/polyline data (`text`). |
-| `EstimatedDistance` | `double` | No | Total estimated path length in meters. |
-| `EstimatedDuration` | `double` | No | Total estimated travel time in seconds. |
-| `Status` | `string` | No | Route execution status (`varchar(50)`). Default: `Planned`. |
-| `CreatedAt` | `DateTime` | No | UTC creation timestamp. |
-| `UpdatedAt` | `DateTime` | Yes | UTC timestamp of last update. |
+| `Id` | `Guid` | No | Primary key. |
+| `CollectionAssignmentId` | `Guid` | No | Unique FK to `CollectionAssignment.Id` (cascade delete). |
+| `RoutingMethod` | `string enum` | No | `ManualOrder` initially; `VerifiedProvider` only when an approved provider actually returned verified route data. |
+| `RouteGeometry` | `string` | Yes | Provider-returned geometry only; no geometry is implied for manual ordering. |
+| `EstimatedDistanceMeters` / `EstimatedDurationSeconds` | `double` | Yes | Provider-verified estimates only; nullable for manual order. |
+| `CreatedAt` / `UpdatedAt` | `DateTime` | No / Yes | Audit timestamps. |
 
-#### Route Status Values
-- `Planned`: Computed, ready for execution.
-- `Active`: Driver currently navigating the route.
-- `Completed`: Driver completed all waypoints.
-- `Cancelled`: Route discontinued or superseded.
-
----
-
-### 5.4 `RouteStop`
-Ordered waypoint visited along the route.
-
-| Field | Type | Nullable | Description |
+| `RouteStop` Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
-| `Id` | `Guid` | No | Primary Key (`uuid`). |
-| `RouteId` | `Guid` | No | FK to `Route.Id` (Cascade delete). |
-| `Sequence` | `int` | No | 1-based order of stop execution. |
-| `WasteBinId` | `Guid` | Yes | FK to `WasteBin.Id` (if bin waypoint). |
-| `WasteReportId` | `Guid` | Yes | FK to `WasteReport.Id` (if report waypoint). |
-| `Latitude` | `double` | No | Stop coordinate latitude. |
-| `Longitude` | `double` | No | Stop coordinate longitude. |
-| `Status` | `string` | No | Stop status (`varchar(50)`). Default: `Pending`. |
-| `ArrivedAt` | `DateTime` | Yes | UTC timestamp when driver reached stop. |
-| `CompletedAt` | `DateTime` | Yes | UTC timestamp when stop clearance finished. |
+| `Id` | `Guid` | No | Primary key. |
+| `RouteId` | `Guid` | No | FK to `Route.Id` (cascade delete). |
+| `CollectionTaskId` | `Guid` | No | FK to exactly one existing C2 `CollectionTask` (restrict delete). It is the only target reference. |
+| `CollectionAssignmentTaskClaimId` | `Guid` | No | FK to the assignment’s matching task claim (restrict delete). |
+| `Sequence` | `int` | No | Positive, officer-managed execution order. |
+| `Status` | `string enum` | No | `Pending`, `Completed`, or `Failed`; default `Pending`. |
+| `CompletedAt` / `FailedAt` | `DateTime` | Yes | Exactly one is set for the corresponding terminal state. |
+| `FailureReason` | `string` | Yes | Required 5–500 characters if `Status == Failed`; forbidden otherwise. |
+| `CreatedAt` / `UpdatedAt` | `DateTime` | No / Yes | Audit timestamps. |
 
-#### Stop Status Values
-- `Pending`: Awaiting visit.
-- `Arrived`: Driver arrived at waypoint.
-- `Completed`: Waste collected at stop.
-- `Skipped`: Stop skipped due to obstruction or access issue.
+`RouteStopStatusHistory` records every stop transition using the same actor/time/notes pattern as other histories. A stop cannot be marked terminal twice. A route stop never stores its own report/bin foreign keys, independently editable coordinates, or obsolete `Skipped` state.
 
-*Uniqueness Constraint:* `(RouteId, Sequence)` must be unique.
+### 5.5 PostgreSQL constraints and indexes
+
+- `DriverProfile.UserId` is PK; `DriverProfile.LicenseNumber` is nullable and unique when non-null.
+- `Vehicle.RegistrationNumber` is unique; `VehicleSupportedWasteType` uses composite PK `(VehicleId, WasteType)`.
+- `Route.CollectionAssignmentId` is unique; `(RouteId, Sequence)` is unique and `Sequence > 0`.
+- `CollectionAssignmentTaskClaim` is unique for `(CollectionAssignmentId, CollectionTaskId)` and has a **partial unique index** on `CollectionTaskId WHERE IsActive = true`. This directly enforces one unfinished assignment claim per task without a join.
+- `RouteStop.CollectionAssignmentTaskClaimId` is unique. Its composite FK `(CollectionAssignmentTaskClaimId, CollectionTaskId)` references the claim’s unique `(Id, CollectionTaskId)` pair, enforcing that the stop and claim name the same task.
+- `CollectionAssignment` has partial unique indexes on `DriverId` and `VehicleId` where `Status IN ('Assigned', 'InProgress')`. These predicates use columns on the assignment row and are PostgreSQL-enforceable without a join.
+- A creation/cancellation/finalization transaction also revalidates the C2 task status and active claim under database concurrency control; indexes complement, rather than replace, that authoritative service validation.
+- Check constraints enforce all documented enums, positive `CapacityLiters`, required cancellation reason, required failure reason, and timestamp/state consistency.
 
 ---
 
@@ -858,10 +868,20 @@ builder.Entity<WasteBin>().HasIndex(b => b.CollectionZoneId);
 builder.Entity<WasteBin>().HasIndex(b => b.Status);
 
 builder.Entity<CollectionTask>().HasIndex(t => t.Status);
-builder.Entity<CollectionTask>().HasIndex(t => t.ScheduledFor);
+builder.Entity<CollectionTask>().HasIndex(t => t.ScheduledAt);
 
-builder.Entity<CollectionAssignment>().HasIndex(a => new { a.DriverId, a.Status });
-builder.Entity<CollectionAssignment>().HasIndex(a => new { a.VehicleId, a.Status });
+builder.Entity<CollectionAssignment>()
+    .HasIndex(a => a.DriverId)
+    .HasFilter("\"Status\" IN ('Assigned', 'InProgress')")
+    .IsUnique();
+builder.Entity<CollectionAssignment>()
+    .HasIndex(a => a.VehicleId)
+    .HasFilter("\"Status\" IN ('Assigned', 'InProgress')")
+    .IsUnique();
+builder.Entity<CollectionAssignmentTaskClaim>()
+    .HasIndex(c => c.CollectionTaskId)
+    .HasFilter("\"IsActive\" = TRUE")
+    .IsUnique();
 
 builder.Entity<Complaint>().HasIndex(c => c.Status);
 builder.Entity<Complaint>().HasIndex(c => c.CitizenId);
@@ -898,14 +918,16 @@ erDiagram
     WasteBin ||--o{ CollectionScheduleBin : "included_in"
 
     CollectionSchedule ||--o{ CollectionTask : "generates"
-    CollectionTask ||--o{ CollectionTaskItem : "contains"
     CollectionTask ||--o{ CollectionTaskStatusHistory : "tracks"
-    CollectionTask ||--o| CollectionAssignment : "assigned_via"
+    CollectionTask ||--o{ CollectionAssignmentTaskClaim : "claimed_by"
 
     DriverProfile ||--o{ CollectionAssignment : "executes"
     Vehicle ||--o{ CollectionAssignment : "utilizes"
     CollectionAssignment ||--o| Route : "navigates"
+    CollectionAssignment ||--o{ CollectionAssignmentTaskClaim : "claims"
     Route ||--o{ RouteStop : "contains"
+    CollectionAssignmentTaskClaim ||--|| RouteStop : "scheduled_as"
+    CollectionTask ||--o{ RouteStop : "executed_at"
 
     AiWorkflow ||--o{ AiWorkflowStep : "executes"
     AiWorkflowStep ||--o{ AiToolCall : "invokes"

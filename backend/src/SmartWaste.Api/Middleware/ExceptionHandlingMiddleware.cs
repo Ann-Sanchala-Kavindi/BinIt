@@ -118,6 +118,13 @@ public class ExceptionHandlingMiddleware
                 Detail = forbEx.Message,
                 Instance = context.Request.Path
             },
+            InvalidWorkflowTransitionException transEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.Conflict,
+                Title = "Invalid Workflow State Transition",
+                Detail = transEx.Message,
+                Instance = context.Request.Path
+            },
             BusinessRuleConflictException confEx => new ProblemDetails
             {
                 Status = (int)HttpStatusCode.Conflict,

@@ -28,6 +28,8 @@ import { EditBinPage, RegisterBinPage } from '../features/collection/pages/BinFo
 import { RecordBinObservationPage } from '../features/collection/pages/RecordBinObservationPage';
 import { CollectionNeedsPage } from '../features/collection/pages/CollectionNeedsPage';
 import { CollectionTaskEnhancedDetailPage, CollectionTasksPage } from '../features/collection/pages/CollectionTasksPages';
+import { ManagerFleetRoutesPage } from '../features/fleet/pages/ManagerFleetRoutesPage';
+import { DispatchRoutesPage } from '../features/fleet/pages/DispatchRoutesPage';
 
 /**
  * Renders auth pages or redirects already-authenticated users to their role default dashboard.
@@ -121,6 +123,7 @@ export const AppRoutes: React.FC = () => {
             <Route path="/officer/schedules" element={<CollectionNeedsPage />} />
             <Route path="/officer/tasks" element={<CollectionTasksPage />} />
             <Route path="/officer/tasks/:id" element={<CollectionTaskEnhancedDetailPage />} />
+            <Route path="/officer/dispatch" element={<DispatchRoutesPage />} />
             <Route
               path="/officer/complaints"
               element={
@@ -159,13 +162,7 @@ export const AppRoutes: React.FC = () => {
             />
             <Route
               path="/manager/fleet"
-              element={
-                <ComingSoonPage
-                  title="Fleet & Routes"
-                  description="Management visibility into collection vehicles, driver assignments, and active routes. This module is currently under development."
-                  backTo="/manager/dashboard"
-                />
-              }
+              element={<ManagerFleetRoutesPage />}
             />
             <Route
               path="/manager/operations"

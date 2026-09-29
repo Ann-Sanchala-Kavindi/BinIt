@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using SmartWaste.Domain.Collection.Entities;
 using SmartWaste.Domain.Entities;
 using SmartWaste.Domain.Reporting.Entities;
+using SmartWaste.Domain.Workflow.Entities;
 
 namespace SmartWaste.Infrastructure.Persistence;
 
@@ -30,6 +31,24 @@ public class AppDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
     public DbSet<CollectionTask> CollectionTasks => Set<CollectionTask>();
     public DbSet<CollectionTaskStatusHistory> CollectionTaskStatusHistories => Set<CollectionTaskStatusHistory>();
     public DbSet<CollectionTaskScheduleHistory> CollectionTaskScheduleHistories => Set<CollectionTaskScheduleHistory>();
+
+    // Component 3 — Fleet and driver persistence foundation
+    public DbSet<DriverProfile> DriverProfiles => Set<DriverProfile>();
+    public DbSet<Vehicle> Vehicles => Set<Vehicle>();
+    public DbSet<VehicleSupportedWasteType> VehicleSupportedWasteTypes => Set<VehicleSupportedWasteType>();
+    public DbSet<CollectionAssignment> CollectionAssignments => Set<CollectionAssignment>();
+    public DbSet<CollectionAssignmentTaskClaim> CollectionAssignmentTaskClaims => Set<CollectionAssignmentTaskClaim>();
+    public DbSet<CollectionAssignmentStatusHistory> CollectionAssignmentStatusHistories => Set<CollectionAssignmentStatusHistory>();
+    public DbSet<Route> Routes => Set<Route>();
+    public DbSet<RouteStop> RouteStops => Set<RouteStop>();
+    public DbSet<RouteStopStatusHistory> RouteStopStatusHistories => Set<RouteStopStatusHistory>();
+
+    // Agentic AI Workflow Persistence Foundation
+    public DbSet<AgentWorkflow> AgentWorkflows => Set<AgentWorkflow>();
+    public DbSet<AgentWorkflowStep> AgentWorkflowSteps => Set<AgentWorkflowStep>();
+    public DbSet<AgentWorkflowTransition> AgentWorkflowTransitions => Set<AgentWorkflowTransition>();
+    public DbSet<AgentWorkflowApproval> AgentWorkflowApprovals => Set<AgentWorkflowApproval>();
+    public DbSet<AgentWorkflowExecutionResult> AgentWorkflowExecutionResults => Set<AgentWorkflowExecutionResult>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

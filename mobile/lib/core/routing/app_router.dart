@@ -13,8 +13,13 @@ import '../../features/citizen/presentation/citizen_placeholder_screen.dart';
 import '../../features/bins/data/public_waste_bins_repository.dart';
 import '../../features/bins/presentation/bin_details_screen.dart';
 import '../../features/bins/presentation/find_bins_screen.dart';
+import '../../features/driver/presentation/driver_assignment_screen.dart';
 import '../../features/driver/presentation/driver_dashboard_screen.dart';
+import '../../features/driver/presentation/driver_history_detail_screen.dart';
+import '../../features/driver/presentation/driver_history_screen.dart';
 import '../../features/driver/presentation/driver_placeholder_screen.dart';
+import '../../features/driver/presentation/driver_route_screen.dart';
+import '../../features/driver/presentation/driver_tasks_screen.dart';
 import '../../features/reporting/data/reporting_repository.dart';
 import '../../features/reporting/models/waste_report_detail_model.dart';
 import '../../features/reporting/presentation/edit_report_screen.dart';
@@ -238,19 +243,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/driver/tasks',
-            builder: (context, state) => const DriverPlaceholderScreen(
-              title: 'Collection Tasks',
-              description: 'Your assigned collection tasks will appear here.',
-              icon: Icons.checklist,
-            ),
+            builder: (context, state) => const DriverTasksScreen(),
           ),
           GoRoute(
             path: '/driver/route',
-            builder: (context, state) => const DriverPlaceholderScreen(
-              title: 'Route',
-              description: 'Your collection route and stops will appear here.',
-              icon: Icons.alt_route,
-            ),
+            builder: (context, state) => const DriverRouteScreen(),
           ),
           GoRoute(
             path: '/driver/profile',
@@ -267,11 +264,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Standalone Driver Sub-flow Routes (Dedicated screen with Back action)
       GoRoute(
         path: '/driver/assignment',
-        builder: (context, state) => const DriverPlaceholderScreen(
-          title: 'My Assignment',
-          description: 'Your active collection assignment will appear here.',
-          icon: Icons.assignment_outlined,
-          hasScaffold: true,
+        builder: (context, state) => const DriverAssignmentScreen(),
+      ),
+      GoRoute(
+        path: '/driver/history',
+        builder: (context, state) => const DriverHistoryScreen(),
+      ),
+      GoRoute(
+        path: '/driver/history/:assignmentId',
+        builder: (context, state) => DriverHistoryDetailScreen(
+          assignmentId: state.pathParameters['assignmentId']!,
         ),
       ),
       GoRoute(
