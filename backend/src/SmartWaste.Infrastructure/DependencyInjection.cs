@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartWaste.Application.Collection.Interfaces;
+using SmartWaste.Application.Complaints.Interfaces;
 using SmartWaste.Application.Fleet.Interfaces;
 using SmartWaste.Application.Common.Options;
 using SmartWaste.Application.Interfaces;
@@ -12,6 +13,7 @@ using SmartWaste.Application.Workflow.Services;
 using SmartWaste.Infrastructure.Workflow.Services;
 using SmartWaste.Domain.Entities;
 using SmartWaste.Infrastructure.Collection.Services;
+using SmartWaste.Infrastructure.Complaints.Services;
 using SmartWaste.Infrastructure.Fleet.Services;
 using SmartWaste.Infrastructure.Persistence;
 using SmartWaste.Infrastructure.Reporting.Services;
@@ -80,6 +82,9 @@ public static class DependencyInjection
         services.AddScoped<IAssignmentReadService, AssignmentReadService>();
         services.AddScoped<ICollectionAssignmentService, CollectionAssignmentService>();
         services.AddScoped<IFleetPlanningAiService, FleetPlanningAiService>();
+
+        // Component 4 — Citizen Complaints Management
+        services.AddScoped<IComplaintService, ComplaintService>();
 
         // Agentic AI Workflow Services
         services.AddSingleton<IAgentWorkflowStateMachine, AgentWorkflowStateMachine>();
