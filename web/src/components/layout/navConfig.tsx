@@ -36,6 +36,7 @@ export const managerNavItems: NavItem[] = [
   { label: 'AI Approvals', to: '/manager/ai-approvals', icon: <AiWorkflowIcon /> },
   { label: 'Fleet & Routes', to: '/manager/fleet', icon: <FleetIcon /> },
   { label: 'Waste Reports', to: '/manager/reports', icon: <ReportsIcon /> },
+  { label: 'Complaints', to: '/manager/complaints', icon: <ComplaintsIcon /> },
   { label: 'Operations', to: '/manager/operations', icon: <OperationsIcon /> },
   { label: 'Analytics', to: '/manager/analytics', icon: <AnalyticsIcon /> },
   { label: 'Audit Logs', to: '/manager/audit', icon: <AuditIcon /> },
