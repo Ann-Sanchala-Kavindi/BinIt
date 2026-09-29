@@ -97,3 +97,73 @@ describe('AppRoutes - Complaints Routes Access', () => {
   });
 });
 
+describe('AppRoutes - Operations Routes Access', () => {
+  beforeEach(() => {
+    useAuthStore.getState().logout();
+  });
+
+  it('allows WasteOfficer to access /officer/operations', () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        id: 'officer-1',
+        fullName: 'Officer Perera',
+        email: 'officer@smartwaste.local',
+        role: 'WasteOfficer',
+        mustChangePassword: false,
+      },
+      accessToken: 'officer-token',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/officer/operations']}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('operational-issues-page')).toBeInTheDocument();
+  });
+
+  it('allows MunicipalManager to access /manager/operations', () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      isLoading: false,
+      user: {
+        id: 'mgr-1',
+        fullName: 'Manager Silva',
+        email: 'manager@smartwaste.local',
+        role: 'MunicipalManager',
+        mustChangePassword: false,
+      },
+      accessToken: 'manager-token',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/manager/operations']}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('operational-issues-page')).toBeInTheDocument();
+  });
+
+  it('redirects unauthenticated user accessing /officer/operations to /login', () => {
+    useAuthStore.setState({
+      isAuthenticated: false,
+      isLoading: false,
+      user: null,
+      accessToken: null,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/officer/operations']}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('heading', { name: /sign in to your account/i })).toBeInTheDocument();
+  });
+});
+
+
