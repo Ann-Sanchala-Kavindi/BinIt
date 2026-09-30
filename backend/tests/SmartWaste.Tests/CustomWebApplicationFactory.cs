@@ -36,7 +36,9 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] = connToUse,
-                ["Jwt:Key"] = builtConfig["Jwt:Key"] ?? "ThisIsASecretKeyForSmartWasteDevelopmentOnly12345!",
+                ["Jwt:Key"] = !string.IsNullOrWhiteSpace(builtConfig["Jwt:Key"])
+                    ? builtConfig["Jwt:Key"]
+                    : "ThisIsASecretKeyForSmartWasteDevelopmentOnly12345!",
                 ["Jwt:Issuer"] = "SmartWaste.Api",
                 ["Jwt:Audience"] = "SmartWaste.Clients",
                 ["Jwt:ExpiryMinutes"] = "60",

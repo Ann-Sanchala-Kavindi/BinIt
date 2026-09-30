@@ -278,6 +278,8 @@ class AuthenticatedMobileShell extends ConsumerWidget {
         appBar: AppBar(
           backgroundColor: backgroundColor ?? AppColors.dashboardBackground,
           surfaceTintColor: Colors.transparent,
+          centerTitle: false,
+          titleSpacing: AppSpacing.md,
           title: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
