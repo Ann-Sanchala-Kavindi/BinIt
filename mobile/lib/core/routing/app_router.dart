@@ -13,6 +13,10 @@ import '../../features/citizen/presentation/citizen_placeholder_screen.dart';
 import '../../features/bins/data/public_waste_bins_repository.dart';
 import '../../features/bins/presentation/bin_details_screen.dart';
 import '../../features/bins/presentation/find_bins_screen.dart';
+import '../../features/complaints/data/complaints_repository.dart';
+import '../../features/complaints/presentation/citizen_complaints_screen.dart';
+import '../../features/complaints/presentation/complaint_detail_screen.dart';
+import '../../features/complaints/presentation/submit_complaint_screen.dart';
 import '../../features/driver/presentation/driver_assignment_screen.dart';
 import '../../features/driver/presentation/driver_dashboard_screen.dart';
 import '../../features/driver/presentation/driver_history_detail_screen.dart';
@@ -117,10 +121,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/citizen/complaints',
-            builder: (context, state) => const CitizenPlaceholderScreen(
-              title: 'Complaints',
-              description: 'Report or track service concerns and operational quality issues.',
-              icon: Icons.feedback_outlined,
+            builder: (context, state) => CitizenComplaintsScreen(
+              repository: ref.watch(complaintsRepositoryProvider),
             ),
           ),
           GoRoute(
@@ -168,6 +170,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           reportId: state.pathParameters['id']!,
           initialReport: state.extra as WasteReportDetailModel?,
           repository: ref.watch(reportingRepositoryProvider),
+        ),
+      ),
+      GoRoute(
+        path: '/citizen/complaints/new',
+        builder: (context, state) => SubmitComplaintScreen(
+          repository: ref.watch(complaintsRepositoryProvider),
+        ),
+      ),
+      GoRoute(
+        path: '/citizen/complaints/:id',
+        builder: (context, state) => ComplaintDetailScreen(
+          complaintId: state.pathParameters['id']!,
+          repository: ref.watch(complaintsRepositoryProvider),
         ),
       ),
       GoRoute(

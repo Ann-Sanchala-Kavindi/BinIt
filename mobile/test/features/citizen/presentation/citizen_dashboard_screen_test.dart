@@ -23,6 +23,9 @@ import 'package:mobile/features/reporting/models/waste_type.dart';
 import 'package:mobile/features/reporting/presentation/my_reports_screen.dart';
 import 'package:mobile/features/reporting/presentation/report_detail_screen.dart';
 import 'package:mobile/features/reporting/presentation/report_waste_screen.dart';
+import 'package:mobile/features/complaints/data/complaints_repository.dart';
+import 'package:mobile/features/complaints/models/complaint_model.dart';
+import 'package:mobile/features/complaints/presentation/citizen_complaints_screen.dart';
 
 class MockReportingRepository extends ReportingRepository {
   List<WasteReportListItemModel> reportsToReturn = [];
@@ -158,6 +161,29 @@ class MockPublicWasteBinsRepository extends PublicWasteBinsRepository {
   }
 }
 
+class MockComplaintsRepository extends ComplaintsRepository {
+  MockComplaintsRepository() : super();
+
+  @override
+  Future<PagedComplaintsModel> getMyComplaints({
+    int page = 1,
+    int pageSize = 20,
+    ComplaintStatus? status,
+    ComplaintCategory? category,
+    String? search,
+    String? sortBy = 'createdAt',
+    String? sortDirection = 'desc',
+  }) async {
+    return PagedComplaintsModel(
+      items: const [],
+      page: page,
+      pageSize: pageSize,
+      totalCount: 0,
+      totalPages: 1,
+    );
+  }
+}
+
 void main() {
   late MockReportingRepository mockRepo;
 
@@ -176,6 +202,7 @@ void main() {
     AuthNotifier Function()? notifierOverride,
     ReportingRepository? repositoryOverride,
     PublicWasteBinsRepository? publicBinsRepositoryOverride,
+    ComplaintsRepository? complaintsRepositoryOverride,
     Size? surfaceSize,
     Key? key,
   }) {
@@ -188,6 +215,9 @@ void main() {
         reportingRepositoryProvider.overrideWithValue(repositoryOverride ?? mockRepo),
         publicWasteBinsRepositoryProvider.overrideWithValue(
           publicBinsRepositoryOverride ?? MockPublicWasteBinsRepository(),
+        ),
+        complaintsRepositoryProvider.overrideWithValue(
+          complaintsRepositoryOverride ?? MockComplaintsRepository(),
         ),
       ],
       child: Consumer(
@@ -320,7 +350,8 @@ void main() {
       // Tap Complaints
       await tester.tap(find.byKey(const Key('citizen_bottom_nav_complaints')));
       await tester.pumpAndSettle();
-      expect(find.text('Report or track service concerns and operational quality issues.'), findsOneWidget);
+      expect(find.byType(CitizenComplaintsScreen), findsOneWidget);
+      expect(find.text('My Complaints'), findsOneWidget);
 
       // Tap Profile
       await tester.tap(find.byKey(const Key('citizen_bottom_nav_profile')));
@@ -352,7 +383,8 @@ void main() {
       // Tap Complaints
       await tester.tap(find.byKey(const Key('citizen_bottom_nav_complaints')));
       await tester.pumpAndSettle();
-      expect(find.text('Report or track service concerns and operational quality issues.'), findsOneWidget);
+      expect(find.byType(CitizenComplaintsScreen), findsOneWidget);
+      expect(find.text('My Complaints'), findsOneWidget);
 
       // Trigger system back button
       await tester.binding.handlePopRoute();

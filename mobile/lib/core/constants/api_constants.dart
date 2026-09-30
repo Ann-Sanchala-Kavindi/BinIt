@@ -55,6 +55,10 @@ class ApiConstants {
   static const String publicWasteBins = '/bins/public';
   static String publicWasteBinDetail(String id) => '/bins/public/$id';
 
+  // Citizen & Staff Complaint endpoints
+  static const String complaints = '/complaints';
+  static String complaintDetail(String id) => '/complaints/$id';
+
   // Driver & Fleet endpoints
   static String driverProfile(String id) => '/drivers/$id';
   static const String driverAvailability = '/drivers/me/availability';
