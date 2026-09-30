@@ -2,7 +2,9 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using SmartWaste.Domain.Collection.Entities;
+using SmartWaste.Domain.Complaints.Entities;
 using SmartWaste.Domain.Entities;
+using SmartWaste.Domain.Operations.Entities;
 using SmartWaste.Domain.Reporting.Entities;
 using SmartWaste.Domain.Workflow.Entities;
 
@@ -42,6 +44,10 @@ public class AppDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
     public DbSet<Route> Routes => Set<Route>();
     public DbSet<RouteStop> RouteStops => Set<RouteStop>();
     public DbSet<RouteStopStatusHistory> RouteStopStatusHistories => Set<RouteStopStatusHistory>();
+
+    // Component 4 — Complaints & Driver Operational Issues
+    public DbSet<Complaint> Complaints => Set<Complaint>();
+    public DbSet<OperationalIssue> OperationalIssues => Set<OperationalIssue>();
 
     // Agentic AI Workflow Persistence Foundation
     public DbSet<AgentWorkflow> AgentWorkflows => Set<AgentWorkflow>();

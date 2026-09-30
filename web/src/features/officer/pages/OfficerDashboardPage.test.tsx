@@ -506,8 +506,7 @@ describe('WasteOfficer Dashboard', () => {
     expect(storeState.user).toBeNull();
   });
 
-  it('ensures WasteOfficer placeholder subroutes link back to /officer/dashboard', async () => {
-    const user = userEvent.setup();
+  it('ensures /officer/complaints opens the real Complaints operational page', async () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -521,19 +520,15 @@ describe('WasteOfficer Dashboard', () => {
     });
 
     render(
-      <MemoryRouter initialEntries={['/officer/bins']}>
+      <MemoryRouter initialEntries={['/officer/complaints']}>
         <AppRoutes />
       </MemoryRouter>
     );
 
-    const backButton = screen.getByRole('link', { name: /back to dashboard/i });
-    expect(backButton).toBeInTheDocument();
-    expect(backButton).toHaveAttribute('href', '/officer/dashboard');
-
-    await user.click(backButton);
-    expect(await screen.findByText(/welcome back,/i)).toBeInTheDocument();
-    const headings = await screen.findAllByRole('heading', { name: /waste officer dashboard/i });
-    expect(headings.length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByRole('heading', { name: /complaints/i })).toBeInTheDocument();
+    expect(
+      screen.getByText(/review and resolve service complaints submitted by citizens/i)
+    ).toBeInTheDocument();
   });
 
   it('ensures /officer/waste-reports opens the real Waste Reports operational page', async () => {

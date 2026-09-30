@@ -22,6 +22,9 @@ import 'package:mobile/features/driver/presentation/driver_assignment_screen.dar
 import 'package:mobile/features/driver/presentation/driver_dashboard_screen.dart';
 import 'package:mobile/features/driver/presentation/driver_route_screen.dart';
 import 'package:mobile/features/driver/presentation/driver_tasks_screen.dart';
+import 'package:mobile/features/operations/data/operations_repository.dart';
+import 'package:mobile/features/operations/models/operational_issue_model.dart';
+import 'package:mobile/features/operations/presentation/driver_operational_issues_screen.dart';
 
 class MockDriverAuthNotifier extends AuthNotifier {
   final AuthState _initial;
@@ -123,6 +126,27 @@ class FakeTestDriverRepository extends DriverRepository {
   }
 }
 
+class MockOperationsRepository extends OperationsRepository {
+  @override
+  Future<PagedOperationalIssuesModel> getMyOperationalIssues({
+    int page = 1,
+    int pageSize = 20,
+    OperationalIssueStatus? status,
+    OperationalIssueType? issueType,
+    String? search,
+    String? sortBy = 'createdAt',
+    String? sortDirection = 'desc',
+  }) async {
+    return PagedOperationalIssuesModel(
+      items: const [],
+      page: page,
+      pageSize: pageSize,
+      totalCount: 0,
+      totalPages: 1,
+    );
+  }
+}
+
 AssignmentTaskModel _createSampleTask(String id, String code) {
   return AssignmentTaskModel(
     id: id,
@@ -205,6 +229,7 @@ void main() {
   Widget createDriverTestApp({
     AuthNotifier Function()? notifierOverride,
     DriverRepository? repositoryOverride,
+    OperationsRepository? operationsRepositoryOverride,
   }) {
     return ProviderScope(
       overrides: [
@@ -214,6 +239,9 @@ void main() {
         ),
         driverRepositoryProvider.overrideWithValue(
           repositoryOverride ?? FakeTestDriverRepository(),
+        ),
+        operationsRepositoryProvider.overrideWithValue(
+          operationsRepositoryOverride ?? MockOperationsRepository(),
         ),
       ],
       child: Consumer(
@@ -660,13 +688,12 @@ void main() {
       await tester.ensureVisible(incidentsCard);
       await tester.tap(incidentsCard);
       await tester.pumpAndSettle();
-      expect(
-          find.text(
-              'You will be able to report collection or vehicle-related operational issues here.'),
-          findsOneWidget);
+      expect(find.byType(DriverOperationalIssuesScreen), findsOneWidget);
+      expect(find.text('Operational Issues'), findsAtLeastNWidgets(1));
 
-      // Back via placeholder back button
-      await tester.tap(find.byKey(const Key('driver_placeholder_back_button')));
+      // Back via back button in AppBar
+      final backButton = find.byTooltip('Back');
+      await tester.tap(backButton);
       await tester.pumpAndSettle();
       expect(find.byType(DriverDashboardScreen), findsOneWidget);
 

@@ -715,11 +715,12 @@ describe('WasteReportDetailPage', () => {
     (reportingApi.getWasteReport as ReturnType<typeof vi.fn>).mockResolvedValue(verifiedDetail);
     (reportingApi.getWasteReportHistory as ReturnType<typeof vi.fn>).mockResolvedValue(verifiedHistory);
 
+    await user.selectOptions(screen.getByLabelText(/verification priority/i), 'Medium');
     const confirmBtn = screen.getByTestId('confirm-verify-report-button');
     await user.click(confirmBtn);
 
     // Assert API called
-    expect(reportingApi.verifyReport).toHaveBeenCalledWith(mockDetail.id);
+    expect(reportingApi.verifyReport).toHaveBeenCalledWith(mockDetail.id, 'Medium');
 
     // Modal closed
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -888,6 +889,7 @@ describe('WasteReportDetailPage', () => {
     const verifyBtn = await screen.findByTestId('verify-report-button');
     await user.click(verifyBtn);
 
+    await user.selectOptions(screen.getByLabelText(/verification priority/i), 'High');
     const confirmBtn = screen.getByTestId('confirm-verify-report-button');
 
     // Rapid double-clicks
@@ -896,6 +898,7 @@ describe('WasteReportDetailPage', () => {
     await user.click(confirmBtn);
 
     expect(reportingApi.verifyReport).toHaveBeenCalledTimes(1);
+    expect(reportingApi.verifyReport).toHaveBeenCalledWith(mockDetail.id, 'High');
     expect(confirmBtn).toBeDisabled();
 
     // Resolve
@@ -933,6 +936,7 @@ describe('WasteReportDetailPage', () => {
       status: 'Cancelled',
     });
 
+    await user.selectOptions(screen.getByLabelText(/verification priority/i), 'Low');
     const confirmBtn = screen.getByTestId('confirm-verify-report-button');
     await user.click(confirmBtn);
 
@@ -1006,6 +1010,7 @@ describe('WasteReportDetailPage', () => {
     const verifyBtn = await screen.findByTestId('verify-report-button');
     await user.click(verifyBtn);
 
+    await user.selectOptions(screen.getByLabelText(/verification priority/i), 'Urgent');
     const confirmBtn = screen.getByTestId('confirm-verify-report-button');
     await user.click(confirmBtn);
 
@@ -1023,6 +1028,7 @@ describe('WasteReportDetailPage', () => {
     (reportingApi.verifyReport as ReturnType<typeof vi.fn>).mockRejectedValueOnce(serverError);
 
     await user.click(screen.getByTestId('verify-report-button'));
+    await user.selectOptions(screen.getByLabelText(/verification priority/i), 'Urgent');
     await user.click(screen.getByTestId('confirm-verify-report-button'));
 
     expect(

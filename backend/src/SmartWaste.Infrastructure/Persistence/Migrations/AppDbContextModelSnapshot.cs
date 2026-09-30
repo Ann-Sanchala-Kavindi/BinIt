@@ -805,6 +805,85 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                     b.ToTable("WasteBinAcceptedWasteTypes", (string)null);
                 });
 
+            modelBuilder.Entity("SmartWaste.Domain.Complaints.Entities.Complaint", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("CitizenId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("LocationDescription")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ResolvedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Submitted");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CitizenId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("ResolvedByUserId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("Status", "Category");
+
+                    b.ToTable("Complaints", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Complaints_Category", "\"Category\" IN ('MissedCollection', 'DelayedService', 'PoorService', 'UnresolvedIssue', 'Other')");
+
+                            t.HasCheckConstraint("CK_Complaints_Coordinates", "(\"Latitude\" IS NULL AND \"Longitude\" IS NULL) OR (\"Latitude\" IS NOT NULL AND \"Longitude\" IS NOT NULL AND \"Latitude\" >= -90.0 AND \"Latitude\" <= 90.0 AND \"Longitude\" >= -180.0 AND \"Longitude\" <= 180.0)");
+
+                            t.HasCheckConstraint("CK_Complaints_Status", "\"Status\" IN ('Submitted', 'InReview', 'Resolved')");
+                        });
+                });
+
             modelBuilder.Entity("SmartWaste.Domain.Entities.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -930,6 +1009,85 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                     b.ToTable("DriverProfiles", null, t =>
                         {
                             t.HasCheckConstraint("CK_DriverProfiles_AvailabilityStatus", "\"AvailabilityStatus\" IN ('Available', 'OffDuty')");
+                        });
+                });
+
+            modelBuilder.Entity("SmartWaste.Domain.Operations.Entities.OperationalIssue", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("DriverId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IssueType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<double?>("Latitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("LocationDescription")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<double?>("Longitude")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ResolvedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasDefaultValue("Reported");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("DriverId");
+
+                    b.HasIndex("ResolvedByUserId");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("Status", "IssueType");
+
+                    b.ToTable("OperationalIssues", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_OperationalIssues_Coordinates", "(\"Latitude\" IS NULL AND \"Longitude\" IS NULL) OR (\"Latitude\" IS NOT NULL AND \"Longitude\" IS NOT NULL AND \"Latitude\" >= -90.0 AND \"Latitude\" <= 90.0 AND \"Longitude\" >= -180.0 AND \"Longitude\" <= 180.0)");
+
+                            t.HasCheckConstraint("CK_OperationalIssues_Status", "\"Status\" IN ('Reported', 'InReview', 'Resolved')");
+
+                            t.HasCheckConstraint("CK_OperationalIssues_Type", "\"IssueType\" IN ('VehicleProblem', 'RoadOrAccessIssue', 'EquipmentProblem', 'SafetyConcern', 'OperationalDelay', 'Other')");
                         });
                 });
 
@@ -1616,6 +1774,24 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                     b.Navigation("WasteBin");
                 });
 
+            modelBuilder.Entity("SmartWaste.Domain.Complaints.Entities.Complaint", b =>
+                {
+                    b.HasOne("SmartWaste.Domain.Entities.AppUser", "Citizen")
+                        .WithMany()
+                        .HasForeignKey("CitizenId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SmartWaste.Domain.Entities.AppUser", "ResolvedByUser")
+                        .WithMany()
+                        .HasForeignKey("ResolvedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Citizen");
+
+                    b.Navigation("ResolvedByUser");
+                });
+
             modelBuilder.Entity("SmartWaste.Domain.Entities.DriverProfile", b =>
                 {
                     b.HasOne("SmartWaste.Domain.Entities.AppUser", "User")
@@ -1625,6 +1801,24 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("SmartWaste.Domain.Operations.Entities.OperationalIssue", b =>
+                {
+                    b.HasOne("SmartWaste.Domain.Entities.AppUser", "Driver")
+                        .WithMany()
+                        .HasForeignKey("DriverId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SmartWaste.Domain.Entities.AppUser", "ResolvedByUser")
+                        .WithMany()
+                        .HasForeignKey("ResolvedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Driver");
+
+                    b.Navigation("ResolvedByUser");
                 });
 
             modelBuilder.Entity("SmartWaste.Domain.Reporting.Entities.ReportAttachment", b =>
