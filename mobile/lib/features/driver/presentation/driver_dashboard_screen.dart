@@ -326,7 +326,6 @@ class _DutySegmentButton extends StatelessWidget {
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
             children: [
               if (isLoading)
                 SizedBox(
@@ -1099,9 +1098,11 @@ class _RecentUpdatesSection extends ConsumerWidget {
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
             SizedBox(width: AppSpacing.sm),
-            Text(
-              'Loading recent work…',
-              style: TextStyle(color: AppColors.textSecondary),
+            Expanded(
+              child: Text(
+                'Loading recent work…',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
             ),
           ],
         ),

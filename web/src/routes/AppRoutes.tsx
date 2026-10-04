@@ -32,6 +32,10 @@ import { ManagerFleetRoutesPage } from '../features/fleet/pages/ManagerFleetRout
 import { DispatchRoutesPage } from '../features/fleet/pages/DispatchRoutesPage';
 import { AiApprovalsPage } from '../features/ai-approvals/pages/AiApprovalsPage';
 import { AiWorkflowDetailPage } from '../features/ai-approvals/pages/AiWorkflowDetailPage';
+import { ComplaintsPage } from '../features/complaints/pages/ComplaintsPage';
+import { ComplaintDetailPage } from '../features/complaints/pages/ComplaintDetailPage';
+import { OperationalIssuesPage } from '../features/operations/pages/OperationalIssuesPage';
+import { OperationalIssueDetailPage } from '../features/operations/pages/OperationalIssueDetailPage';
 
 /**
  * Renders auth pages or redirects already-authenticated users to their role default dashboard.
@@ -128,16 +132,10 @@ export const AppRoutes: React.FC = () => {
             <Route path="/officer/ai-approvals" element={<AiApprovalsPage />} />
             <Route path="/officer/ai-approvals/:workflowId" element={<AiWorkflowDetailPage />} />
             <Route path="/officer/dispatch" element={<DispatchRoutesPage />} />
-            <Route
-              path="/officer/complaints"
-              element={
-                <ComingSoonPage
-                  title="Complaints"
-                  description="Review and manage citizen service complaints. This module is currently under development."
-                  backTo="/officer/dashboard"
-                />
-              }
-            />
+            <Route path="/officer/complaints" element={<ComplaintsPage />} />
+            <Route path="/officer/complaints/:id" element={<ComplaintDetailPage />} />
+            <Route path="/officer/operations" element={<OperationalIssuesPage />} />
+            <Route path="/officer/operations/:id" element={<OperationalIssueDetailPage />} />
           </Route>
         </Route>
       </Route>
@@ -151,6 +149,10 @@ export const AppRoutes: React.FC = () => {
             <Route path="/manager/reports/:id" element={<WasteReportDetailPage />} />
             <Route path="/manager/waste-reports" element={<Navigate to="/manager/reports" replace />} />
             <Route path="/manager/waste-reports/:id" element={<WasteReportDetailPage />} />
+            <Route path="/manager/complaints" element={<ComplaintsPage />} />
+            <Route path="/manager/complaints/:id" element={<ComplaintDetailPage />} />
+            <Route path="/manager/operations" element={<OperationalIssuesPage />} />
+            <Route path="/manager/operations/:id" element={<OperationalIssueDetailPage />} />
             <Route path="/manager/users" element={<UserManagementPage />} />
             <Route path="/manager/tasks" element={<CollectionTasksPage />} />
             <Route path="/manager/tasks/:id" element={<CollectionTaskEnhancedDetailPage />} />
@@ -160,16 +162,7 @@ export const AppRoutes: React.FC = () => {
               path="/manager/fleet"
               element={<ManagerFleetRoutesPage />}
             />
-            <Route
-              path="/manager/operations"
-              element={
-                <ComingSoonPage
-                  title="Operations"
-                  description="Higher-level operational oversight, field incident tracking, and active collections. This module is currently under development."
-                  backTo="/manager/dashboard"
-                />
-              }
-            />
+
             <Route
               path="/manager/analytics"
               element={

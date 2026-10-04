@@ -889,6 +889,7 @@ describe('WasteReportDetailPage', () => {
     const verifyBtn = await screen.findByTestId('verify-report-button');
     await user.click(verifyBtn);
 
+    await user.selectOptions(screen.getByLabelText(/verification priority/i), 'High');
     const confirmBtn = screen.getByTestId('confirm-verify-report-button');
     await user.selectOptions(screen.getByLabelText('Verification priority'), 'High');
 
@@ -898,6 +899,7 @@ describe('WasteReportDetailPage', () => {
     await user.click(confirmBtn);
 
     expect(reportingApi.verifyReport).toHaveBeenCalledTimes(1);
+    expect(reportingApi.verifyReport).toHaveBeenCalledWith(mockDetail.id, 'High');
     expect(confirmBtn).toBeDisabled();
 
     // Resolve
@@ -935,6 +937,7 @@ describe('WasteReportDetailPage', () => {
       status: 'Cancelled',
     });
 
+    await user.selectOptions(screen.getByLabelText(/verification priority/i), 'Low');
     const confirmBtn = screen.getByTestId('confirm-verify-report-button');
     await user.selectOptions(screen.getByLabelText('Verification priority'), 'High');
     await user.click(confirmBtn);
@@ -1009,6 +1012,7 @@ describe('WasteReportDetailPage', () => {
     const verifyBtn = await screen.findByTestId('verify-report-button');
     await user.click(verifyBtn);
 
+    await user.selectOptions(screen.getByLabelText(/verification priority/i), 'Urgent');
     const confirmBtn = screen.getByTestId('confirm-verify-report-button');
     await user.selectOptions(screen.getByLabelText('Verification priority'), 'High');
     await user.click(confirmBtn);
@@ -1027,7 +1031,7 @@ describe('WasteReportDetailPage', () => {
     (reportingApi.verifyReport as ReturnType<typeof vi.fn>).mockRejectedValueOnce(serverError);
 
     await user.click(screen.getByTestId('verify-report-button'));
-    await user.selectOptions(screen.getByLabelText('Verification priority'), 'High');
+    await user.selectOptions(screen.getByLabelText(/verification priority/i), 'Urgent');
     await user.click(screen.getByTestId('confirm-verify-report-button'));
 
     expect(

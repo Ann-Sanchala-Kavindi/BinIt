@@ -537,6 +537,31 @@ describe('WasteOfficer Dashboard', () => {
     expect(screen.getByRole('link', { name: 'AI Approvals' })).toHaveAttribute('href', '/officer/ai-approvals');
   });
 
+  it('ensures /officer/complaints opens the real Complaints operational page', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      isLoading: false,
+      accessToken: 'token-officer',
+      user: {
+        id: 'officer-1',
+        fullName: 'Nimal Perera',
+        email: 'officer@smartwaste.local',
+        role: 'WasteOfficer',
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/officer/complaints']}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('heading', { name: /complaints/i })).toBeInTheDocument();
+    expect(
+      screen.getByText(/review and resolve service complaints submitted by citizens/i)
+    ).toBeInTheDocument();
+  });
+
   it('ensures /officer/waste-reports opens the real Waste Reports operational page', async () => {
     useAuthStore.setState({
       isAuthenticated: true,

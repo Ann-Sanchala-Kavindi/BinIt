@@ -430,7 +430,6 @@ describe('MunicipalManager Dashboard', () => {
     });
 
     const managerSubroutes = [
-      '/manager/operations',
       '/manager/analytics',
       '/manager/audit',
     ];

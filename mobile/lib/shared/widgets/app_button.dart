@@ -98,7 +98,7 @@ class AppButton extends StatelessWidget {
           )
         : (icon != null
             ? Row(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize: isFullWidth ? MainAxisSize.max : MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(icon, size: 18),
