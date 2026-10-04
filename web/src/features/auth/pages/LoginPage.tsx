@@ -10,10 +10,12 @@ import { Input } from '../../../components/ui/Input';
 import { Button } from '../../../components/ui/Button';
 import { Alert } from '../../../components/ui/Alert';
 import { getDefaultRouteForRole } from '../../../routes/routeUtils';
+import { EyeIcon, EyeOffIcon } from '../../../components/ui/Icons';
 
 export const LoginPage: React.FC = () => {
   const [serverError, setServerError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [isAccessModalOpen, setIsAccessModalOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -105,11 +107,26 @@ export const LoginPage: React.FC = () => {
         <Input
           id="password"
           label="Password"
-          type="password"
+          type={showPassword ? 'text' : 'password'}
           autoComplete="current-password"
           placeholder="••••••••"
           error={errors.password?.message}
           {...register('password')}
+          rightElement={
+            <button
+              type="button"
+              onClick={() => setShowPassword((prev) => !prev)}
+              className="text-slate-400 hover:text-slate-600 focus:outline-none focus:text-slate-600 p-1 transition-colors cursor-pointer rounded"
+              aria-label={showPassword ? 'Hide' : 'Show'}
+              title={showPassword ? 'Hide' : 'Show'}
+            >
+              {showPassword ? (
+                <EyeOffIcon className="w-4.5 h-4.5 text-slate-500" />
+              ) : (
+                <EyeIcon className="w-4.5 h-4.5 text-slate-400" />
+              )}
+            </button>
+          }
         />
 
         <Button
@@ -117,7 +134,7 @@ export const LoginPage: React.FC = () => {
           variant="primary"
           size="md"
           isLoading={isLoading}
-          className="w-full mt-2"
+          className="w-full mt-2 font-semibold shadow-xs"
         >
           {isLoading ? 'Signing in...' : 'Sign in'}
         </Button>

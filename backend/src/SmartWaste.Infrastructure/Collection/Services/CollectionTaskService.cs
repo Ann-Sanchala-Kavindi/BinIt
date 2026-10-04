@@ -81,7 +81,7 @@ public class CollectionTaskService : ICollectionTaskService
         }
 
         var isInMemory = _db.Database.ProviderName?.Contains("InMemory") == true;
-        await using var tx = isInMemory ? null : await _db.Database.BeginTransactionAsync(cancellationToken);
+        await using var tx = (isInMemory || _db.Database.CurrentTransaction != null) ? null : await _db.Database.BeginTransactionAsync(cancellationToken);
 
         var lockAcquired = false;
         if (request.WasteReportId.HasValue)
@@ -125,6 +125,137 @@ public class CollectionTaskService : ICollectionTaskService
             }
 
             // Structured PostgreSQL unique violation identification using error codes and constraint names
+            if (ex.InnerException is PostgresException postgresEx && postgresEx.SqlState == PostgresErrorCodes.UniqueViolation)
+            {
+                if (postgresEx.ConstraintName == "IX_CollectionTasks_WasteReportId_Active" ||
+                    postgresEx.ConstraintName == "IX_CollectionTasks_WasteBinId_Active")
+                {
+                    throw new BusinessRuleConflictException("An active collection task already exists for this target.");
+                }
+
+                if (postgresEx.ConstraintName == "IX_CollectionTasks_TaskCode")
+                {
+                    throw new BusinessRuleConflictException("A task code collision occurred. Please retry the operation.");
+                }
+            }
+            else if (ex.InnerException?.Message.Contains("IX_CollectionTasks_WasteReportId_Active") == true ||
+                     ex.InnerException?.Message.Contains("IX_CollectionTasks_WasteBinId_Active") == true ||
+                     ex.Message.Contains("IX_CollectionTasks_WasteReportId_Active") ||
+                     ex.Message.Contains("IX_CollectionTasks_WasteBinId_Active"))
+            {
+                throw new BusinessRuleConflictException("An active collection task already exists for this target.");
+            }
+            else if (ex.InnerException?.Message.Contains("IX_CollectionTasks_TaskCode") == true ||
+                     ex.Message.Contains("IX_CollectionTasks_TaskCode"))
+            {
+                throw new BusinessRuleConflictException("A task code collision occurred. Please retry the operation.");
+            }
+
+            throw;
+        }
+        catch (Exception)
+        {
+            if (tx != null)
+            {
+                await tx.RollbackAsync(cancellationToken);
+            }
+            throw;
+        }
+        finally
+        {
+            if (lockAcquired)
+            {
+                _reportSchedulingLock.Release();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Creates an authoritative collection task from an approved AI collection planning proposal.
+    /// Restricted to MunicipalManager.
+    /// Reuses all authoritative domain rules (report status/claim, bin observations, routine schedules, task codes).
+    /// Does not initiate an internal transaction if an ambient/outer transaction exists.
+    /// </summary>
+    public async Task<CollectionTaskDetailDto> CreateTaskFromApprovedPlanAsync(
+        CreateManualCollectionTaskRequest request,
+        Guid managerUserId,
+        CancellationToken cancellationToken = default)
+    {
+        // 1. Request validation
+        var validationResult = await _createValidator.ValidateAsync(request, cancellationToken);
+        if (!validationResult.IsValid)
+        {
+            throw new ValidationException(validationResult.Errors);
+        }
+
+        var nowUtc = DateTime.UtcNow;
+
+        if (request.ScheduledAt.HasValue && request.ScheduledAt.Value < nowUtc)
+        {
+            throw new ValidationException("Scheduled time cannot be in the past.");
+        }
+
+        var isInMemory = _db.Database.ProviderName?.Contains("InMemory") == true;
+        await using var tx = (isInMemory || _db.Database.CurrentTransaction != null)
+            ? null
+            : await _db.Database.BeginTransactionAsync(cancellationToken);
+
+        var lockAcquired = false;
+        if (request.WasteReportId.HasValue)
+        {
+            await _reportSchedulingLock.WaitAsync(cancellationToken);
+            lockAcquired = true;
+        }
+
+        try
+        {
+            var taskCode = await GenerateUniqueTaskCodeAsync(nowUtc, cancellationToken);
+            CollectionTask task;
+
+            if (request.WasteReportId.HasValue)
+            {
+                task = await HandleReportTaskCreationAsync(
+                    request,
+                    taskCode,
+                    managerUserId,
+                    nowUtc,
+                    isInMemory,
+                    cancellationToken,
+                    creationMethod: TaskCreationMethod.ApprovedAiPlan,
+                    initialHistoryNotes: "Task created from approved AI collection plan");
+            }
+            else if (request.WasteBinId.HasValue)
+            {
+                task = await HandleBinTaskCreationAsync(
+                    request,
+                    taskCode,
+                    managerUserId,
+                    nowUtc,
+                    cancellationToken,
+                    creationMethod: TaskCreationMethod.ApprovedAiPlan,
+                    initialHistoryNotes: "Task created from approved AI collection plan");
+            }
+            else
+            {
+                throw new ValidationException("Exactly one target (WasteReportId or WasteBinId) must be supplied.");
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+
+            if (tx != null)
+            {
+                await tx.CommitAsync(cancellationToken);
+            }
+
+            return await BuildDetailDtoAsync(task.Id, cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            if (tx != null)
+            {
+                await tx.RollbackAsync(cancellationToken);
+            }
+
             if (ex.InnerException is PostgresException postgresEx && postgresEx.SqlState == PostgresErrorCodes.UniqueViolation)
             {
                 if (postgresEx.ConstraintName == "IX_CollectionTasks_WasteReportId_Active" ||
@@ -247,7 +378,9 @@ public class CollectionTaskService : ICollectionTaskService
         Guid actorUserId,
         DateTime nowUtc,
         bool isInMemory,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TaskCreationMethod creationMethod = TaskCreationMethod.Manual,
+        string? initialHistoryNotes = null)
     {
         var reportId = request.WasteReportId!.Value;
 
@@ -325,7 +458,7 @@ public class CollectionTaskService : ICollectionTaskService
             HandlingNotes = string.IsNullOrWhiteSpace(request.HandlingNotes) ? null : request.HandlingNotes.Trim(),
             SchedulingReason = string.IsNullOrWhiteSpace(request.SchedulingReason) ? null : request.SchedulingReason.Trim(),
             CreatedByUserId = actorUserId,
-            CreationMethod = TaskCreationMethod.Manual,
+            CreationMethod = creationMethod,
             TriggerObservationId = null,
             RoutineDueDate = null,
             CreatedAt = nowUtc
@@ -340,7 +473,7 @@ public class CollectionTaskService : ICollectionTaskService
             FromStatus = null,
             ToStatus = CollectionTaskStatus.Scheduled,
             ChangedByUserId = actorUserId,
-            Notes = "Task manually created",
+            Notes = initialHistoryNotes ?? "Task manually created",
             ChangedAt = nowUtc
         };
         _db.CollectionTaskStatusHistories.Add(taskStatusHistory);
@@ -368,7 +501,8 @@ public class CollectionTaskService : ICollectionTaskService
         DateTime nowUtc,
         CancellationToken cancellationToken,
         bool allowFailedReplacement = false,
-        string? initialHistoryNotes = null)
+        string? initialHistoryNotes = null,
+        TaskCreationMethod creationMethod = TaskCreationMethod.Manual)
     {
         var binId = request.WasteBinId!.Value;
 
@@ -501,7 +635,7 @@ public class CollectionTaskService : ICollectionTaskService
             HandlingNotes = string.IsNullOrWhiteSpace(request.HandlingNotes) ? null : request.HandlingNotes.Trim(),
             SchedulingReason = string.IsNullOrWhiteSpace(request.SchedulingReason) ? null : request.SchedulingReason.Trim(),
             CreatedByUserId = actorUserId,
-            CreationMethod = TaskCreationMethod.Manual,
+            CreationMethod = creationMethod,
             TriggerObservationId = triggerObservationId,
             RoutineDueDate = routineDueDateResult,
             CreatedAt = nowUtc
@@ -622,7 +756,7 @@ public class CollectionTaskService : ICollectionTaskService
             WasteBinId = t.WasteBinId,
             TargetReference = t.WasteBin != null
                 ? t.WasteBin.BinCode
-                : (t.WasteReportId.HasValue ? $"RPT-{t.WasteReportId.Value.ToString()[..8].ToUpper()}" : string.Empty),
+                : (t.WasteReportId.HasValue ? $"Report {SmartWaste.Application.Reporting.WasteReportReference.FromId(t.WasteReportId.Value)}" : string.Empty),
             CollectionReason = t.CollectionReason,
             Status = t.Status,
             ScheduledAt = t.ScheduledAt,
@@ -958,7 +1092,7 @@ public class CollectionTaskService : ICollectionTaskService
         {
             targetSummary = new CollectionTaskTargetSummaryDto
             {
-                Identifier = $"RPT-{task.WasteReport.Id.ToString()[..8].ToUpper()}",
+                Identifier = $"Report {SmartWaste.Application.Reporting.WasteReportReference.FromId(task.WasteReport.Id)}",
                 Latitude = task.WasteReport.Latitude,
                 Longitude = task.WasteReport.Longitude,
                 AddressText = task.WasteReport.AddressText,

@@ -8,6 +8,7 @@ public class CollectionNeedItemDto
 {
     public Guid Id { get; set; }
     public string TargetType { get; set; } = string.Empty;
+    public string? ReportReference => TargetType == "Report" ? SmartWaste.Application.Reporting.WasteReportReference.FromId(Id) : null;
     public string CollectionReason { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public double Latitude { get; set; }

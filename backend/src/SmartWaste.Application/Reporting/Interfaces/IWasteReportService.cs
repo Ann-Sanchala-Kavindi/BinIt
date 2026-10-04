@@ -76,11 +76,11 @@ public interface IWasteReportService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// WasteOfficer initiates review: Submitted → UnderReview. Persisted atomically with history.
+    /// MunicipalManager or WasteOfficer initiates review: Submitted → UnderReview. Persisted atomically with history.
     /// Viewing a report does NOT automatically start review.
     /// </summary>
     /// <exception cref="SmartWaste.Application.Common.Exceptions.NotFoundException">Report not found.</exception>
-    /// <exception cref="SmartWaste.Application.Common.Exceptions.ForbiddenException">Actor is not WasteOfficer.</exception>
+    /// <exception cref="SmartWaste.Application.Common.Exceptions.ForbiddenException">Actor is not authorized staff.</exception>
     /// <exception cref="SmartWaste.Application.Common.Exceptions.BusinessRuleConflictException">Report not in Submitted status.</exception>
     Task<WasteReportDetailDto> StartReviewAsync(
         Guid reportId,
@@ -89,11 +89,11 @@ public interface IWasteReportService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// WasteOfficer verifies a report: UnderReview → Verified. Priority remains null (C1 invariant).
+    /// MunicipalManager or WasteOfficer verifies a report: UnderReview → Verified, with an explicit priority.
     /// VerifiedByUserId and VerifiedAt are set. Persisted atomically with history.
     /// </summary>
     /// <exception cref="SmartWaste.Application.Common.Exceptions.NotFoundException">Report not found.</exception>
-    /// <exception cref="SmartWaste.Application.Common.Exceptions.ForbiddenException">Actor is not WasteOfficer.</exception>
+    /// <exception cref="SmartWaste.Application.Common.Exceptions.ForbiddenException">Actor is not authorized staff.</exception>
     /// <exception cref="SmartWaste.Application.Common.Exceptions.BusinessRuleConflictException">Report not in UnderReview status.</exception>
     Task<WasteReportDetailDto> VerifyAsync(
         Guid reportId,
@@ -103,11 +103,11 @@ public interface IWasteReportService
         CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// WasteOfficer rejects a report: UnderReview → Rejected. Reason stored in history notes.
+    /// MunicipalManager or WasteOfficer rejects a report: UnderReview → Rejected. Reason stored in history notes.
     /// VerifiedByUserId/VerifiedAt are NOT set on rejection. Persisted atomically with history.
     /// </summary>
     /// <exception cref="SmartWaste.Application.Common.Exceptions.NotFoundException">Report not found.</exception>
-    /// <exception cref="SmartWaste.Application.Common.Exceptions.ForbiddenException">Actor is not WasteOfficer.</exception>
+    /// <exception cref="SmartWaste.Application.Common.Exceptions.ForbiddenException">Actor is not authorized staff.</exception>
     /// <exception cref="SmartWaste.Application.Common.Exceptions.BusinessRuleConflictException">Report not in UnderReview status.</exception>
     Task<WasteReportDetailDto> RejectAsync(
         Guid reportId,
@@ -135,5 +135,13 @@ public interface IWasteReportService
     /// </summary>
     Task<PagedResult<VerifiedWasteReportToolItemDto>> GetVerifiedReportsForAiAsync(
         GetVerifiedWasteReportsForAiQuery query,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns exactly one report by authoritative UUID for advisory pre-verification analysis.
+    /// Only Submitted and UnderReview reports are eligible; no report state is changed.
+    /// </summary>
+    Task<WasteReportForVerificationToolItemDto> GetReportForVerificationAiAsync(
+        Guid reportId,
         CancellationToken cancellationToken = default);
 }

@@ -254,3 +254,58 @@ services.AddScoped<IAgentWorkflowService, AgentWorkflowService>();
 2. **Workflow API (`/api/v1/agent-workflows`):** Exposes initiation, status inspection, and history endpoints to the React web application.
 3. **HITL Approval Endpoints:** Dedicated endpoints for authorized managers to submit `CollectionPlanning` and `FleetDispatch` decisions with mandatory reasons.
 4. **Execution Bridges:** Transactional service calls to create `Scheduled` `CollectionTasks` and invoke `CollectionAssignmentService` directly within ASP.NET Core without AI service privilege escalation.
+
+---
+
+## 9. Dispatch Approval and Authoritative Assignment Execution
+
+`AwaitingDispatchApproval` is a human-review boundary. Only an authenticated
+`MunicipalManager` or `WasteOfficer` can approve, request revision, reject, or
+execute an approved dispatch proposal. Approval is bound to the exact completed
+`OperationalValidation` (C4) step through `AgentWorkflowApproval.WorkflowStepId`.
+The persisted C4 output must be `ReadyForHumanReview`; when it declares
+`requiresAcknowledgement`, the human must explicitly acknowledge warnings.
+
+The approved execution source is the canonical `FleetPlanning.OutputJson` C3
+proposal that C4 received in its `InputJson`. ASP.NET verifies that invariant
+before execution when a persisted C3 step is available, then performs fresh
+authoritative checks for task eligibility and claims, driver and vehicle
+availability/occupancy, and fleet-waste compatibility. It uses the existing
+`CollectionAssignmentService` transaction to create one `CollectionAssignment`
+per C3 dispatch plan with the suggested stop order preserved. C3 `unplannedTasks`
+remain scheduled and unassigned.
+
+No Python or Gemini call occurs after dispatch approval. Successful backend
+assignment creation transitions `DispatchApproved -> ExecutingAssignments ->
+Completed`; this records completion of the approved planning/execution setup,
+not physical driver route completion. Driver lifecycle actions remain separate.
+Revision transitions to `DispatchNeedsRevision`; rejection transitions to
+`Rejected`. If authoritative execution fails, its business transaction rolls
+back and a durable `Failed` workflow/execution audit is persisted.
+
+---
+
+## 10. Recovery After Committed Collection Task Creation
+
+The general state machine treats `Failed` as terminal. There is one narrowly
+guarded service-level recovery for a transport or AI-service failure while
+resuming C3/C4 *after* the approved C2 plan has already created and committed
+`Scheduled` `CollectionTasks`. A fresh call to the existing
+`execute-collection-plan` action, with the current workflow version, may resume
+the Python continuation only when the persisted failure transition identifies
+that exact post-commit phase, the completed C2 approval and successful task
+creation execution are still bound together, every recorded task ID still
+exists in `Scheduled` state, and no C3/C4 output or dispatch action exists.
+
+The recovery records an audited `Failed -> FleetPlanning` transition and
+increments the workflow version. It reuses the committed task IDs and stored
+execution summary; it does not rerun C1/C2 or create tasks again. An unrelated
+failure, stale version, changed task, or partial downstream result remains
+ineligible for this recovery path. This exception does not change the generic
+state machine's terminal-state policy.
+
+The workflow-detail read projection may include `binCodes`, keyed by full bin
+UUIDs found in the persisted C2 need references. The values come from the
+authoritative `WasteBins.BinCode` records and are display-only; C2 `OutputJson`
+and every canonical `needId` remain unchanged. Missing historical bin metadata
+is tolerated by the presentation layer.

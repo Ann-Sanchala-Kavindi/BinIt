@@ -37,6 +37,14 @@ void main() {
       expect(model.citizenName, 'Kamal Perera');
       expect(model.createdAt, DateTime.parse('2026-09-15T08:30:00.000Z').toUtc());
       expect(model.updatedAt, DateTime.parse('2026-09-15T09:00:00.000Z').toUtc());
+      expect(model.reportReference, isNull);
+    });
+
+    test('reads optional backend reportReference without replacing the authoritative ID', () {
+      final model = WasteReportListItemModel.fromJson({...validJson, 'reportReference': '3FA85F64'});
+      expect(model.reportReference, '3FA85F64');
+      expect(model.id, validJson['id']);
+      expect(model.toJson()['reportReference'], '3FA85F64');
     });
 
     test('deserializes with optional and nullable fields as null (Citizen scope response)', () {

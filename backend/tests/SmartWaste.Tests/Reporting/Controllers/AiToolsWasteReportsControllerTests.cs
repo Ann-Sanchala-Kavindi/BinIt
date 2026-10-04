@@ -24,6 +24,7 @@ public class AiToolsWasteReportsControllerTests
     private readonly CustomWebApplicationFactory _factory;
     private const string InternalApiKey = "TestInternalServiceKey_12345!";
     private const string InternalEndpoint = "/api/v1/internal/ai-tools/waste-reports/verified";
+    private const string ExactReportEndpoint = "/api/v1/internal/ai-tools/waste-reports/for-verification";
 
     private static readonly JsonSerializerOptions SharedTestJsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -66,6 +67,35 @@ public class AiToolsWasteReportsControllerTests
         db.Users.Add(uniqueCitizen);
         await db.SaveChangesAsync();
         return uniqueCitizen.Id;
+    }
+
+    private async Task<WasteReport> SeedExactReportAsync(WasteReportStatus status, string description, bool withAttachment = false)
+    {
+        var citizenId = await GetOrCreateCitizenIdAsync();
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var report = new WasteReport
+        {
+            CitizenId = citizenId,
+            Description = description,
+            WasteType = WasteType.Organic,
+            Latitude = 6.9271,
+            Longitude = 79.8612,
+            AddressText = "Market entrance",
+            Status = status,
+            CreatedAt = DateTime.UtcNow
+        };
+        if (withAttachment)
+        {
+            report.Attachments.Add(new ReportAttachment
+            {
+                StorageKey = "private/report-image-key",
+                FileType = "image/jpeg"
+            });
+        }
+        db.WasteReports.Add(report);
+        await db.SaveChangesAsync();
+        return report;
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -394,5 +424,107 @@ public class AiToolsWasteReportsControllerTests
             var historyCount = db.WasteReportStatusHistories.Count(h => h.WasteReportId == reportId);
             historyCount.Should().Be(0);
         }
+    }
+
+    [Fact]
+    public async Task GetReportForVerification_Submitted_UsesExactIdAndSafeDtoWithoutMutation()
+    {
+        var target = await SeedExactReportAsync(WasteReportStatus.Submitted, "Target citizen description", withAttachment: true);
+        var other = await SeedExactReportAsync(WasteReportStatus.Submitted, "Other citizen description");
+
+        var response = await _client.SendAsync(CreateInternalRequest(HttpMethod.Get, $"{ExactReportEndpoint}/{target.Id}"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var rawJson = await response.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(rawJson);
+        json.RootElement.ValueKind.Should().Be(JsonValueKind.Object);
+        var fields = json.RootElement.EnumerateObject().Select(property => property.Name).ToArray();
+        fields.Should().BeEquivalentTo(new[]
+        {
+            "id", "reportReference", "description", "wasteType", "latitude", "longitude",
+            "addressText", "status", "createdAt", "attachmentCount"
+        });
+        var result = JsonSerializer.Deserialize<WasteReportForVerificationToolItemDto>(rawJson, SharedTestJsonOptions);
+        result.Should().NotBeNull();
+        result!.Id.Should().Be(target.Id).And.NotBe(other.Id);
+        result.ReportReference.Should().Be(target.Id.ToString("N")[..8].ToUpperInvariant());
+        result.Description.Should().Be(target.Description);
+        result.Status.Should().Be(WasteReportStatus.Submitted);
+        result.AttachmentCount.Should().Be(1);
+        rawJson.Should().NotContain("private/report-image-key");
+        rawJson.Should().NotContain(InternalApiKey);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        (await db.WasteReports.FindAsync(target.Id))!.Status.Should().Be(WasteReportStatus.Submitted);
+        db.WasteReportStatusHistories.Count(history => history.WasteReportId == target.Id).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetReportForVerification_UnderReview_ReturnsExactReport()
+    {
+        var report = await SeedExactReportAsync(WasteReportStatus.UnderReview, "Review started during C1 analysis");
+
+        var response = await _client.SendAsync(CreateInternalRequest(HttpMethod.Get, $"{ExactReportEndpoint}/{report.Id}"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<WasteReportForVerificationToolItemDto>(SharedTestJsonOptions);
+        result!.Id.Should().Be(report.Id);
+        result.Status.Should().Be(WasteReportStatus.UnderReview);
+    }
+
+    [Theory]
+    [InlineData(WasteReportStatus.Verified)]
+    [InlineData(WasteReportStatus.Rejected)]
+    [InlineData(WasteReportStatus.Cancelled)]
+    [InlineData(WasteReportStatus.Scheduled)]
+    [InlineData(WasteReportStatus.InProgress)]
+    [InlineData(WasteReportStatus.Resolved)]
+    public async Task GetReportForVerification_IneligibleStatus_Returns409(WasteReportStatus status)
+    {
+        var report = await SeedExactReportAsync(status, $"Ineligible {status} report");
+
+        var response = await _client.SendAsync(CreateInternalRequest(HttpMethod.Get, $"{ExactReportEndpoint}/{report.Id}"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>(SharedTestJsonOptions);
+        problem!.Title.Should().Be("Business Rule Conflict");
+    }
+
+    [Fact]
+    public async Task GetReportForVerification_UnknownId_Returns404()
+    {
+        var response = await _client.SendAsync(CreateInternalRequest(HttpMethod.Get, $"{ExactReportEndpoint}/{Guid.NewGuid()}"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("WrongSecretKey123!")]
+    public async Task GetReportForVerification_MissingOrInvalidInternalKey_Returns401(string? key)
+    {
+        var response = await _client.SendAsync(CreateInternalRequest(HttpMethod.Get, $"{ExactReportEndpoint}/{Guid.NewGuid()}", key));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GetReportForVerification_UserBearerTokenAlone_Returns401()
+    {
+        var login = await _client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequest
+        {
+            Email = "officer@smartwaste.local",
+            Password = "DevPassword123!",
+            ClientType = "web"
+        });
+        login.StatusCode.Should().Be(HttpStatusCode.OK);
+        var auth = await login.Content.ReadFromJsonAsync<AuthResponse>(SharedTestJsonOptions);
+        var request = CreateInternalRequest(HttpMethod.Get, $"{ExactReportEndpoint}/{Guid.NewGuid()}", apiKey: null);
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", auth!.AccessToken);
+
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }

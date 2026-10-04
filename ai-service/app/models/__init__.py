@@ -21,6 +21,16 @@ from app.models.collection_planning import (
     CollectionPlanningResult,
     NeedHandlingRecommendation,
 )
+from app.models.shared_planner import (
+    PlannerValidationError,
+    SharedPlannerRequest,
+    SharedPlannerResult,
+    SharedPlannerStep,
+    SpecialistType,
+    create_flagship_planner_result,
+    has_dependency_path_to_specialist,
+    validate_planner_result,
+)
 
 __all__ = [
     "AnalysisConfidence",
@@ -38,4 +48,12 @@ __all__ = [
     "CollectionPlanningRequest",
     "CollectionPlanningResult",
     "NeedHandlingRecommendation",
+    "SpecialistType",
+    "SharedPlannerStep",
+    "SharedPlannerRequest",
+    "SharedPlannerResult",
+    "PlannerValidationError",
+    "has_dependency_path_to_specialist",
+    "validate_planner_result",
+    "create_flagship_planner_result",
 ]

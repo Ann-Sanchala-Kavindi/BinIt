@@ -8,6 +8,7 @@ import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_loading_indicator.dart';
 import '../data/reporting_repository.dart';
 import '../models/report_attachment_model.dart';
+import '../models/report_reference.dart';
 import '../models/waste_report_detail_model.dart';
 import '../models/waste_report_status.dart';
 import '../models/waste_report_status_history_model.dart';
@@ -187,6 +188,23 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (_reportError != null) ...[
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text("Couldn't refresh this report. Showing the last loaded status."),
+                    AppButton.outlined(
+                      key: const Key('report_detail_refresh_retry_button'),
+                      label: 'Retry',
+                      icon: Icons.refresh,
+                      onPressed: () => _loadAllData(isRefresh: true),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+            ],
             // Top Summary Card
             _buildSummaryCard(report),
 
@@ -325,6 +343,18 @@ class _ReportDetailScreenState extends State<ReportDetailScreen> {
           ),
 
           const SizedBox(height: AppSpacing.sm),
+
+          Text(
+            reportLabel(report.id, authoritative: report.reportReference),
+            key: const Key('report_detail_reference'),
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primaryDark,
+            ),
+          ),
+
+          const SizedBox(height: AppSpacing.xs),
 
           // Created Timestamp Row
           Row(

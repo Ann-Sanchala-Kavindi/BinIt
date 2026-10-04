@@ -6,6 +6,7 @@ using SmartWaste.Application.Common.Exceptions;
 using SmartWaste.Application.Workflow.DTOs.Requests;
 using SmartWaste.Application.Workflow.Services;
 using SmartWaste.Domain.Common;
+using SmartWaste.Domain.Collection.Entities;
 using SmartWaste.Domain.Entities;
 using SmartWaste.Domain.Workflow.Entities;
 using SmartWaste.Domain.Workflow.Enums;
@@ -53,7 +54,7 @@ public class AgentWorkflowServiceApiTests
     // =========================================================================
 
     [Fact]
-    public async Task GetWorkflowsAsync_WasteOfficer_SeesOnlyOwnWorkflows()
+    public async Task GetWorkflowsAsync_WasteOfficer_SeesAllWorkflowsAcrossInitiators()
     {
         var dbName = Guid.NewGuid().ToString("N");
         using var db = CreateContext(dbName);
@@ -71,9 +72,8 @@ public class AgentWorkflowServiceApiTests
         var query = new AgentWorkflowListQuery { Page = 1, PageSize = 10 };
         var result = await sut.GetWorkflowsAsync(query, officerA, AppRoles.WasteOfficer);
 
-        result.TotalCount.Should().Be(2);
-        result.Items.Should().HaveCount(2);
-        result.Items.Should().OnlyContain(w => w.InitiatedByUserId == officerA);
+        result.TotalCount.Should().Be(3);
+        result.Items.Should().HaveCount(3);
     }
 
     [Fact]
@@ -98,6 +98,45 @@ public class AgentWorkflowServiceApiTests
 
         result.TotalCount.Should().Be(2);
         result.Items.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task WorkflowReadDtos_ExposeTriggerMetadataAndDynamicReportReference()
+    {
+        using var db = CreateContext(Guid.NewGuid().ToString("N"));
+        var sut = CreateService(db);
+        var staffId = Guid.NewGuid();
+        SeedUser(db, staffId);
+        var manual = await sut.CreateWorkflowAsync("Manual collection planning objective", staffId);
+        var reportId = Guid.Parse("e4b9a172-2211-4ccd-8855-112233445566");
+        var citizen = new AgentWorkflow
+        {
+            Objective = "Analyze one submitted waste report",
+            InitiatedByUserId = staffId,
+            TriggerType = AgentWorkflowTriggerType.CitizenReportSubmission,
+            TriggeringWasteReportId = reportId
+        };
+        citizen.EnsureValidTrigger();
+        db.AgentWorkflows.Add(citizen);
+        await db.SaveChangesAsync();
+
+        var list = await sut.GetWorkflowsAsync(new AgentWorkflowListQuery { Page = 1, PageSize = 10 },
+            staffId, AppRoles.WasteOfficer);
+        var manualSummary = list.Items.Single(item => item.Id == manual.Id);
+        manualSummary.TriggerType.Should().Be(AgentWorkflowTriggerType.ManualOperationalPlanning);
+        manualSummary.TriggeringWasteReportId.Should().BeNull();
+        manualSummary.ReportReference.Should().BeNull();
+        var citizenSummary = list.Items.Single(item => item.Id == citizen.Id);
+        citizenSummary.TriggeringWasteReportId.Should().Be(reportId);
+        citizenSummary.ReportReference.Should().Be("E4B9A172");
+
+        var manualDetail = await sut.GetWorkflowDetailsAsync(manual.Id, staffId, AppRoles.WasteOfficer);
+        manualDetail.TriggerType.Should().Be(AgentWorkflowTriggerType.ManualOperationalPlanning);
+        manualDetail.ReportReference.Should().BeNull();
+        var citizenDetail = await sut.GetWorkflowDetailsAsync(citizen.Id, staffId, AppRoles.WasteOfficer);
+        citizenDetail.TriggerType.Should().Be(AgentWorkflowTriggerType.CitizenReportSubmission);
+        citizenDetail.TriggeringWasteReportId.Should().Be(reportId);
+        citizenDetail.ReportReference.Should().Be("E4B9A172");
     }
 
     [Fact]
@@ -139,7 +178,7 @@ public class AgentWorkflowServiceApiTests
     // =========================================================================
 
     [Fact]
-    public async Task GetWorkflowDetailsAsync_WasteOfficer_CannotAccessOthersWorkflow()
+    public async Task GetWorkflowDetailsAsync_WasteOfficer_CanAccessOthersWorkflow()
     {
         var dbName = Guid.NewGuid().ToString("N");
         using var db = CreateContext(dbName);
@@ -152,8 +191,54 @@ public class AgentWorkflowServiceApiTests
 
         var wf = await sut.CreateWorkflowAsync("Owner workflow", ownerOfficer);
 
-        var act = () => sut.GetWorkflowDetailsAsync(wf.Id, strangerOfficer, AppRoles.WasteOfficer);
-        await act.Should().ThrowAsync<NotFoundException>();
+        var result = await sut.GetWorkflowDetailsAsync(wf.Id, strangerOfficer, AppRoles.WasteOfficer);
+        result.Should().NotBeNull();
+        result.Id.Should().Be(wf.Id);
+    }
+
+    [Fact]
+    public async Task GetWorkflowDetailsAsync_AddsStoredBinCodesWithoutChangingC2Identifiers()
+    {
+        using var db = CreateContext(Guid.NewGuid().ToString("N"));
+        var sut = CreateService(db);
+        var officerId = Guid.NewGuid();
+        SeedUser(db, officerId);
+        var bin = new WasteBin { Id = Guid.NewGuid(), BinCode = "BIN-COL-0042" };
+        db.WasteBins.Add(bin);
+        await db.SaveChangesAsync();
+
+        var workflow = await sut.CreateWorkflowAsync("Review bin needs", officerId);
+        var step = await sut.AddStepAsync(workflow.Id, WorkflowStepType.CollectionPlanning, "c2_agent");
+        await sut.CompleteStepAsync(step.Id, JsonSerializer.Serialize(new
+        {
+            candidateGroups = new[] { new { needReferences = new[] { new { targetType = "Bin", needId = bin.Id } } } },
+            separateHandling = Array.Empty<object>(),
+            deferredNeeds = Array.Empty<object>()
+        }));
+
+        var detail = await sut.GetWorkflowDetailsAsync(workflow.Id, officerId, AppRoles.WasteOfficer);
+        detail.BinCodes.Should().ContainKey(bin.Id).WhoseValue.Should().Be(bin.BinCode);
+        detail.Steps.Single(s => s.Id == step.Id).Output!.Value
+            .GetProperty("candidateGroups")[0].GetProperty("needReferences")[0]
+            .GetProperty("needId").GetGuid().Should().Be(bin.Id);
+    }
+
+    [Fact]
+    public async Task GetWorkflowDetailsAsync_UnauthorizedRole_ThrowsForbiddenException()
+    {
+        var dbName = Guid.NewGuid().ToString("N");
+        using var db = CreateContext(dbName);
+        var sut = CreateService(db);
+
+        var ownerOfficer = Guid.NewGuid();
+        var citizenId = Guid.NewGuid();
+        SeedUser(db, ownerOfficer);
+        SeedUser(db, citizenId);
+
+        var wf = await sut.CreateWorkflowAsync("Owner workflow", ownerOfficer);
+
+        var act = () => sut.GetWorkflowDetailsAsync(wf.Id, citizenId, AppRoles.Citizen);
+        await act.Should().ThrowAsync<ForbiddenException>();
     }
 
     [Fact]
@@ -352,7 +437,7 @@ public class AgentWorkflowServiceApiTests
     }
 
     [Fact]
-    public async Task StartWorkflowAsync_UnauthorizedOfficer_ThrowsNotFound()
+    public async Task StartWorkflowAsync_OtherOfficer_TransitionsToPlanning()
     {
         var dbName = Guid.NewGuid().ToString("N");
         using var db = CreateContext(dbName);
@@ -365,8 +450,26 @@ public class AgentWorkflowServiceApiTests
 
         var wf = await sut.CreateWorkflowAsync("Owner workflow", ownerOfficer);
 
-        var act = () => sut.StartWorkflowAsync(wf.Id, strangerOfficer, AppRoles.WasteOfficer);
-        await act.Should().ThrowAsync<NotFoundException>();
+        var result = await sut.StartWorkflowAsync(wf.Id, strangerOfficer, AppRoles.WasteOfficer);
+        result.Status.Should().Be(AgentWorkflowStatus.Planning);
+    }
+
+    [Fact]
+    public async Task StartWorkflowAsync_UnauthorizedRole_ThrowsForbiddenException()
+    {
+        var dbName = Guid.NewGuid().ToString("N");
+        using var db = CreateContext(dbName);
+        var sut = CreateService(db);
+
+        var ownerOfficer = Guid.NewGuid();
+        var citizenId = Guid.NewGuid();
+        SeedUser(db, ownerOfficer);
+        SeedUser(db, citizenId);
+
+        var wf = await sut.CreateWorkflowAsync("Owner workflow", ownerOfficer);
+
+        var act = () => sut.StartWorkflowAsync(wf.Id, citizenId, AppRoles.Citizen);
+        await act.Should().ThrowAsync<ForbiddenException>();
     }
 
     [Fact]

@@ -84,6 +84,15 @@ public static class DependencyInjection
         // Agentic AI Workflow Services
         services.AddSingleton<IAgentWorkflowStateMachine, AgentWorkflowStateMachine>();
         services.AddScoped<IAgentWorkflowService, AgentWorkflowService>();
+        var workerTimeoutSeconds = configuration.GetValue<int?>("AiService:TimeoutSeconds") ?? 300;
+        services.AddOptions<ReportTriggeredWorkflowWorkerOptions>()
+            .Bind(configuration.GetSection(ReportTriggeredWorkflowWorkerOptions.SectionName))
+            .Validate(options => options.PollIntervalSeconds >= 1 && options.RetryDelaySeconds >= 20 &&
+                options.MaxAttempts >= 1 && options.LeaseSeconds > workerTimeoutSeconds + 30,
+                "The report workflow lease must exceed the AI HTTP timeout with grace; retry delay must respect Gemini spacing.")
+            .ValidateOnStart();
+        services.AddScoped<ReportTriggeredWorkflowProcessor>();
+        services.AddHostedService<ReportTriggeredWorkflowWorker>();
 
         // Cloud Storage — Supabase Storage
         var storageSection = configuration.GetSection(SmartWaste.Infrastructure.Reporting.Storage.SupabaseStorageOptions.SectionName);
@@ -109,13 +118,19 @@ public static class DependencyInjection
             aiBaseUrl = "http://127.0.0.1:8000";
         }
 
-        var timeoutSeconds = 5;
+        var timeoutSeconds = 300;
         if (int.TryParse(aiSection["TimeoutSeconds"], out var parsedTimeout) && parsedTimeout > 0)
         {
             timeoutSeconds = parsedTimeout;
         }
 
         services.AddHttpClient<IAiServiceClient, AiServiceClient>(client =>
+        {
+            client.BaseAddress = new Uri(aiBaseUrl.TrimEnd('/') + "/");
+            client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+            client.DefaultRequestHeaders.Add("Accept", "application/json");
+        });
+        services.AddHttpClient<IPythonOrchestrationClient, PythonOrchestrationClient>(client =>
         {
             client.BaseAddress = new Uri(aiBaseUrl.TrimEnd('/') + "/");
             client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);

@@ -1,13 +1,14 @@
 import sys
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 
 from app.core.config import get_settings
 from app.models.reporting import VerifiedWasteReportItem, VerifiedWasteReportsResponse
+from app.agents.waste_analysis_agent import WASTE_ANALYSIS_SYSTEM_PROMPT, _format_prompt_data
 from app.tools.verified_waste_reports import (
     INTERNAL_AUTH_HEADER,
     MAX_TRANSIENT_RETRIES,
@@ -57,6 +58,16 @@ def _create_mock_backend_response(items=None, total_count=1, page=1, page_size=2
 
 class TestVerifiedWasteReportsTool:
     """Tests for the get_verified_waste_reports allow-listed AI tool."""
+
+    def test_display_reference_is_parsed_for_prose_while_full_id_is_retained(self):
+        payload = _create_mock_backend_response()["items"][0]
+        payload["reportReference"] = payload["id"].replace("-", "")[:8].upper()
+        item = VerifiedWasteReportItem.model_validate(payload)
+        context = _format_prompt_data([item])
+        assert item.id == UUID(payload["id"])
+        assert f'"reportReference": "{payload["reportReference"]}"' in context
+        assert f'"reportId": "{payload["id"]}"' in context
+        assert "Report {reportReference}" in WASTE_ANALYSIS_SYSTEM_PROMPT
 
     def test_tool_metadata(self):
         """Verify tool naming, LangChain tool registration, and parameter descriptions."""

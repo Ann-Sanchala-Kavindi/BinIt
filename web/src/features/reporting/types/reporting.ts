@@ -28,6 +28,7 @@ export interface VerifyWasteReportRequest { priority: WasteReportPriority; }
  * Summary DTO returned by GET /api/v1/waste-reports (WasteReportSummaryDto)
  */
 export interface WasteReportSummaryDto {
+  reportReference?: string;
   id: string;
   description: string;
   wasteType: WasteType;
@@ -57,6 +58,7 @@ export interface ReportAttachmentDto {
  * Full detail response DTO for a specific waste report (WasteReportDetailDto)
  */
 export interface WasteReportDetailDto {
+  reportReference?: string;
   id: string;
   citizenId: string;
   citizenName: string;

@@ -2,7 +2,9 @@ from enum import Enum
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from app.models.workflow_trigger import WorkflowTriggerType, validate_trigger_pair
 
 
 class RecommendedPriority(str, Enum):
@@ -35,7 +37,7 @@ class WasteAnalysisRequest(BaseModel):
     such as SQL queries, citizen IDs, role overrides, or arbitrary endpoints.
     """
 
-    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+    model_config = ConfigDict(populate_by_name=True, str_strip_whitespace=True, extra="forbid")
 
     objective: str = Field(
         ...,
@@ -54,6 +56,28 @@ class WasteAnalysisRequest(BaseModel):
         le=50,
         description="Number of verified reports per page, bounded between 1 and 50.",
     )
+    trigger_type: WorkflowTriggerType = Field(
+        default=WorkflowTriggerType.ManualOperationalPlanning,
+        alias="triggerType",
+    )
+    triggering_waste_report_id: Optional[UUID] = Field(
+        default=None,
+        alias="triggeringWasteReportId",
+    )
+    workflow_objective: Optional[str] = Field(
+        default=None,
+        alias="workflowObjective",
+        min_length=5,
+        max_length=1000,
+        description="ASP.NET-generated trusted workflow objective for report-triggered analysis.",
+    )
+
+    @model_validator(mode="after")
+    def validate_trigger(self) -> "WasteAnalysisRequest":
+        validate_trigger_pair(self.trigger_type, self.triggering_waste_report_id)
+        if self.trigger_type == WorkflowTriggerType.CitizenReportSubmission and not self.workflow_objective:
+            raise ValueError("Report-triggered C1 requires the ASP.NET workflow objective.")
+        return self
 
 
 class WasteReportAnalysis(BaseModel):

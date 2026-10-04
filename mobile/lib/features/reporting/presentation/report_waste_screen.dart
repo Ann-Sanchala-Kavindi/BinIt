@@ -11,6 +11,7 @@ import '../models/report_attachment_model.dart';
 import '../models/selected_location.dart';
 import '../models/selected_report_image.dart';
 import '../models/waste_report_detail_model.dart';
+import '../models/report_reference.dart';
 import '../models/waste_type.dart';
 import '../services/image_picker_service.dart';
 import '../services/location_service.dart';
@@ -789,8 +790,8 @@ class ReportWasteScreenState extends State<ReportWasteScreen> {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
-        final reportId = _createdReport?.id ?? '';
-        final shortId = reportId.length > 8 ? reportId.substring(0, 8) : reportId;
+        final report = _createdReport;
+        final reference = report == null ? null : reportLabel(report.id, authoritative: report.reportReference);
         final photoCount = _uploadedAttachments.length;
         final photoText = photoCount == 0
             ? 'No photos attached.'
@@ -840,10 +841,10 @@ class ReportWasteScreenState extends State<ReportWasteScreen> {
                   height: 1.4,
                 ),
               ),
-              if (shortId.isNotEmpty) ...[
+              if (reference != null) ...[
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Reference: #$shortId',
+                  reference,
                   key: const Key('submission_success_reference_text'),
                   style: const TextStyle(
                     fontSize: 12,

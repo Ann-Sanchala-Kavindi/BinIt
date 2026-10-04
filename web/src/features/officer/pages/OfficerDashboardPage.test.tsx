@@ -13,6 +13,12 @@ vi.mock('../../../api/authApi', () => ({
   },
 }));
 
+vi.mock('../../../features/ai-approvals/api/agentWorkflowApi', () => ({
+  agentWorkflowApi: {
+    listWorkflows: vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, totalCount: 0, totalPages: 0 }),
+  },
+}));
+
 describe('WasteOfficer Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -506,8 +512,7 @@ describe('WasteOfficer Dashboard', () => {
     expect(storeState.user).toBeNull();
   });
 
-  it('ensures WasteOfficer placeholder subroutes link back to /officer/dashboard', async () => {
-    const user = userEvent.setup();
+  it('routes WasteOfficer AI Approvals navigation to the shared dashboard', () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -521,19 +526,15 @@ describe('WasteOfficer Dashboard', () => {
     });
 
     render(
-      <MemoryRouter initialEntries={['/officer/bins']}>
+      <MemoryRouter initialEntries={['/officer/ai-approvals']}>
         <AppRoutes />
       </MemoryRouter>
     );
 
-    const backButton = screen.getByRole('link', { name: /back to dashboard/i });
-    expect(backButton).toBeInTheDocument();
-    expect(backButton).toHaveAttribute('href', '/officer/dashboard');
-
-    await user.click(backButton);
-    expect(await screen.findByText(/welcome back,/i)).toBeInTheDocument();
-    const headings = await screen.findAllByRole('heading', { name: /waste officer dashboard/i });
-    expect(headings.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('heading', { name: 'AI Approvals' })).toBeInTheDocument();
+    expect(screen.getByText('Monitor Agentic AI workflows and manage collection operations.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New End-to-End Collection Operation' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'AI Approvals' })).toHaveAttribute('href', '/officer/ai-approvals');
   });
 
   it('ensures /officer/waste-reports opens the real Waste Reports operational page', async () => {

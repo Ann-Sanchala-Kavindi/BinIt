@@ -21,6 +21,17 @@ public interface ICollectionTaskService
         string actorRole,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Creates an authoritative collection task from an approved AI collection planning proposal.
+    /// Restricted to MunicipalManager.
+    /// Reuses all authoritative domain rules (report status/claim, bin observations, routine schedules, task codes).
+    /// Does not initiate an internal transaction if an ambient/outer transaction exists.
+    /// </summary>
+    Task<CollectionTaskDetailDto> CreateTaskFromApprovedPlanAsync(
+        CreateManualCollectionTaskRequest request,
+        Guid managerUserId,
+        CancellationToken cancellationToken = default);
+
     Task<CollectionTaskDetailDto> CreateReplacementTaskAsync(
         Guid failedTaskId,
         CreateReplacementCollectionTaskRequest request,

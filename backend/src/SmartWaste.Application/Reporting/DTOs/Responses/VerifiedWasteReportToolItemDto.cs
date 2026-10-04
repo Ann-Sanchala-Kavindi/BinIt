@@ -12,6 +12,8 @@ public class VerifiedWasteReportToolItemDto
 {
     public Guid Id { get; set; }
 
+    public string ReportReference => SmartWaste.Application.Reporting.WasteReportReference.FromId(Id);
+
     public string Description { get; set; } = string.Empty;
 
     public WasteType WasteType { get; set; }

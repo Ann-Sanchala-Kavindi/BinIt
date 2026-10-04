@@ -165,7 +165,7 @@ public class CollectionNeedService : ICollectionNeedService
                     Id = report.Id,
                     TargetType = "Report",
                     CollectionReason = "VerifiedReport",
-                    Title = $"Verified Report: {titleText}",
+                    Title = $"Report {SmartWaste.Application.Reporting.WasteReportReference.FromId(report.Id)}: {titleText}",
                     Latitude = report.Latitude,
                     Longitude = report.Longitude,
                     AddressText = report.AddressText,

@@ -44,6 +44,12 @@ void main() {
   });
 
   group('WasteReportStatus Enum Tests', () {
+    test('uses citizen-facing labels for every authoritative report status', () {
+      expect(WasteReportStatus.values.map((status) => status.displayName).toList(), [
+        'Submitted', 'Under Review', 'Verified', 'Rejected',
+        'Scheduled', 'In Progress', 'Resolved', 'Cancelled',
+      ]);
+    });
     test('serializes to string values matching ASP.NET enum exactly', () {
       expect(WasteReportStatus.submitted.toJsonValue(), 'Submitted');
       expect(WasteReportStatus.underReview.toJsonValue(), 'UnderReview');
@@ -308,6 +314,26 @@ void main() {
       expect(report.attachments.first.id, 'att-101');
       expect(report.createdAt, DateTime.parse('2026-09-16T10:55:00.000Z').toUtc());
       expect(report.updatedAt, isNull);
+      expect(report.reportReference, isNull);
+    });
+
+    test('reads an optional reportReference on a normal successful create response', () {
+      final report = WasteReportDetailModel.fromJson({
+        'id': 'c17add4f-79f3-4a0a-a9e0-150fde7d7827',
+        'reportReference': 'C17ADD4F',
+        'citizenId': 'citizen-1',
+        'citizenName': 'Citizen',
+        'description': 'Waste by the road',
+        'wasteType': 'General',
+        'latitude': 6.9,
+        'longitude': 79.8,
+        'status': 'Submitted',
+        'attachments': <dynamic>[],
+        'createdAt': '2026-10-03T08:00:00Z',
+      });
+      expect(report.reportReference, 'C17ADD4F');
+      expect(report.id, 'c17add4f-79f3-4a0a-a9e0-150fde7d7827');
+      expect(report.toJson()['reportReference'], 'C17ADD4F');
     });
 
     test('deserializes scheduled report with non-null priority and verification info', () {

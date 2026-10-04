@@ -12,6 +12,8 @@ public class CollectionNeedToolItemDto
     public string TargetType { get; set; } = string.Empty;
     public Guid? WasteReportId { get; set; }
     public Guid? WasteBinId { get; set; }
+    public string? ReportReference => WasteReportId.HasValue ? SmartWaste.Application.Reporting.WasteReportReference.FromId(WasteReportId.Value) : null;
+    public string? BinCode => BinTelemetry?.BinCode;
     public string CollectionReason { get; set; } = string.Empty;
     public double Latitude { get; set; }
     public double Longitude { get; set; }

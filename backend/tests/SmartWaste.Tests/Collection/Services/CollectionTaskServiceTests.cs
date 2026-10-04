@@ -485,7 +485,7 @@ public class CollectionTaskServiceTests
         binTask.TargetReference.Should().Be("BIN-COL-9999");
 
         var reportTask = result.Items.Single(t => t.TargetType == "Report");
-        reportTask.TargetReference.Should().Be($"RPT-{report.Id.ToString()[..8].ToUpper()}");
+        reportTask.TargetReference.Should().Be($"Report {report.Id.ToString("N")[..8].ToUpperInvariant()}");
     }
 
     #endregion
@@ -578,7 +578,7 @@ public class CollectionTaskServiceTests
         result.CollectionReason.Should().Be(CollectionReason.VerifiedReport);
 
         result.TargetSummary.Should().NotBeNull();
-        result.TargetSummary.Identifier.Should().Be($"RPT-{report.Id.ToString()[..8].ToUpper()}");
+        result.TargetSummary.Identifier.Should().Be($"Report {report.Id.ToString("N")[..8].ToUpperInvariant()}");
         result.TargetSummary.CapacityLiters.Should().BeNull();
         result.TargetSummary.WasteTypes.Should().ContainSingle().Which.Should().Be("General");
         result.TargetSummary.AddressText.Should().Be("Pettah Bus Station");

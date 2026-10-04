@@ -1,6 +1,7 @@
 using SmartWaste.Application.Common.Models;
 using SmartWaste.Application.Workflow.DTOs.Requests;
 using SmartWaste.Application.Workflow.DTOs.Responses;
+using SmartWaste.Application.Workflow.DTOs.Transport;
 using SmartWaste.Domain.Workflow.Entities;
 using SmartWaste.Domain.Workflow.Enums;
 
@@ -11,6 +12,10 @@ namespace SmartWaste.Application.Workflow.Interfaces;
 /// </summary>
 public interface IAgentWorkflowService
 {
+    Task<PythonWorkflowStartRequest> BuildPythonStartRequestAsync(Guid workflowId, int expectedVersion, Guid? expectedProcessingLeaseId = null, CancellationToken cancellationToken = default);
+    Task<AgentWorkflow> PersistReportVerificationPauseAsync(Guid workflowId, PythonOrchestrationEnvelope result, int expectedVersion, Guid? changedByUserId = null, Guid? expectedProcessingLeaseId = null, CancellationToken cancellationToken = default);
+    Task<PythonWorkflowResumeRequest> BuildReportVerificationResumeRequestAsync(Guid workflowId, int expectedVersion, Guid? expectedProcessingLeaseId = null, CancellationToken cancellationToken = default);
+    Task<AgentWorkflow> PersistReportVerificationContinuationAsync(Guid workflowId, PythonOrchestrationEnvelope result, int expectedVersion, Guid? changedByUserId = null, Guid? expectedProcessingLeaseId = null, CancellationToken cancellationToken = default);
     /// <summary>
     /// Creates a new AgentWorkflow in Created state with an initial audit transition record.
     /// </summary>
@@ -143,4 +148,107 @@ public interface IAgentWorkflowService
         string? errorMessage = null,
         Guid? stepId = null,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Atomically approves the collection planning proposal at Gate 1 (AwaitingCollectionApproval -> CollectionApproved).
+    /// Enforces optimistic concurrency, verifies complete C2 snapshot, records approval and audit transition in one transaction.
+    /// Authorized for MunicipalManager and WasteOfficer.
+    /// </summary>
+    Task<AgentWorkflowDetailDto> ApproveCollectionPlanningAsync(
+        Guid workflowId,
+        ApproveCollectionPlanningRequest request,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Atomically requests revision of the collection planning proposal at Gate 1 (AwaitingCollectionApproval -> CollectionNeedsRevision).
+    /// Enforces optimistic concurrency, records reviewer feedback reason, approval and audit transition in one transaction.
+    /// Authorized for MunicipalManager and WasteOfficer.
+    /// </summary>
+    Task<AgentWorkflowDetailDto> RequestCollectionRevisionAsync(
+        Guid workflowId,
+        RequestCollectionRevisionRequest request,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Atomically rejects the collection planning proposal at Gate 1 (AwaitingCollectionApproval -> Rejected).
+    /// Enforces optimistic concurrency, records rejection reason, sets terminal CompletedAt, approval and transition in one transaction.
+    /// Authorized for MunicipalManager and WasteOfficer.
+    /// </summary>
+    Task<AgentWorkflowDetailDto> RejectCollectionPlanningAsync(
+        Guid workflowId,
+        RejectCollectionPlanningRequest request,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Atomically approves the fleet dispatch proposal at Gate 2 (AwaitingDispatchApproval -> DispatchApproved).
+    /// Enforces optimistic concurrency, verifies C4 ReadyForHumanReview and required warning acknowledgement, records approval and audit transition in one transaction.
+    /// Authorized for MunicipalManager and WasteOfficer.
+    /// </summary>
+    Task<AgentWorkflowDetailDto> ApproveDispatchPlanAsync(
+        Guid workflowId,
+        ApproveDispatchPlanRequest request,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Atomically requests revision of the fleet dispatch proposal at Gate 2 (AwaitingDispatchApproval -> DispatchNeedsRevision).
+    /// Enforces optimistic concurrency, records reviewer feedback reason, approval and audit transition in one transaction.
+    /// Authorized for MunicipalManager and WasteOfficer.
+    /// </summary>
+    Task<AgentWorkflowDetailDto> RequestDispatchRevisionAsync(
+        Guid workflowId,
+        RequestDispatchRevisionRequest request,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Atomically rejects the fleet dispatch proposal at Gate 2 (AwaitingDispatchApproval -> Rejected).
+    /// Enforces optimistic concurrency, records rejection reason, sets terminal CompletedAt, approval and transition in one transaction.
+    /// Authorized for MunicipalManager and WasteOfficer.
+    /// </summary>
+    Task<AgentWorkflowDetailDto> RejectDispatchPlanAsync(
+        Guid workflowId,
+        RejectDispatchPlanRequest request,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Authoritative C2 execution bridge: converts an approved C2 collection planning proposal
+    /// into real Scheduled CollectionTasks via the existing CollectionTaskService.
+    /// Enforces:
+    /// - Role: MunicipalManager or WasteOfficer
+    /// - Status: CollectionApproved (or resumable CreatingScheduledTasks)
+    /// - Human approval prerequisite
+    /// - Fresh authoritative need re-validation
+    /// - ScheduledTaskCreation workflow step and CollectionTaskCreation execution result persistence
+    /// - Transitions: CollectionApproved -> CreatingScheduledTasks -> FleetPlanning
+    /// </summary>
+    Task<AgentWorkflowDetailDto> ExecuteCollectionPlanAsync(
+        Guid workflowId,
+        ExecuteCollectionPlanRequest request,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Authoritative C3 execution bridge: converts an approved C3 fleet dispatch proposal
+    /// into real CollectionAssignments via the existing CollectionAssignmentService.
+    /// Enforces:
+    /// - Role: MunicipalManager or WasteOfficer
+    /// - Status: DispatchApproved (or resumable ExecutingAssignments)
+    /// - Gate 2 human approval bound to completed OperationalValidation step
+    /// - C4 ReadyForHumanReview output and warning acknowledgement
+    /// - Fresh authoritative task, driver, vehicle, and compatibility re-validation
+    /// - Ordered RouteStops (1..N) matching approved C3 Sequence
+    /// - AssignmentExecution workflow step and CollectionAssignment execution result persistence
+    /// - Transitions: DispatchApproved -> ExecutingAssignments -> Completed (or Failed)
+    /// </summary>
+    Task<AgentWorkflowDetailDto> ExecuteDispatchPlanAsync(
+        Guid workflowId,
+        ExecuteDispatchPlanRequest request,
+        Guid actorUserId,
+        CancellationToken cancellationToken = default);
 }
+

@@ -65,6 +65,9 @@ public class WasteReportAttachmentControllerTests : IAsyncLifetime
             if (!_createdReportIds.IsEmpty)
             {
                 var reportIds = _createdReportIds.ToList();
+                await db.AgentWorkflows
+                    .Where(w => w.TriggeringWasteReportId.HasValue && reportIds.Contains(w.TriggeringWasteReportId.Value))
+                    .ExecuteDeleteAsync();
                 await db.ReportAttachments
                     .Where(a => reportIds.Contains(a.WasteReportId))
                     .ExecuteDeleteAsync();

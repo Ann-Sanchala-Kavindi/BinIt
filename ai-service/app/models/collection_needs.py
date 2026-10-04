@@ -30,6 +30,8 @@ class CollectionNeedToolItem(BaseModel):
     target_type: str = Field(alias="targetType")
     waste_report_id: Optional[UUID] = Field(default=None, alias="wasteReportId")
     waste_bin_id: Optional[UUID] = Field(default=None, alias="wasteBinId")
+    report_reference: Optional[str] = Field(default=None, alias="reportReference")
+    bin_code: Optional[str] = Field(default=None, alias="binCode")
     collection_reason: str = Field(alias="collectionReason")
     latitude: float
     longitude: float

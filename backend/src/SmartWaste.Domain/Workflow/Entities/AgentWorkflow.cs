@@ -1,4 +1,5 @@
 using SmartWaste.Domain.Entities;
+using SmartWaste.Domain.Reporting.Entities;
 using SmartWaste.Domain.Workflow.Enums;
 
 namespace SmartWaste.Domain.Workflow.Entities;
@@ -16,6 +17,16 @@ public class AgentWorkflow
     /// Excludes hidden reasoning, prompt templates, and raw tokens.
     /// </summary>
     public string Objective { get; set; } = string.Empty;
+
+    public AgentWorkflowTriggerType TriggerType { get; set; } = AgentWorkflowTriggerType.ManualOperationalPlanning;
+    public Guid? TriggeringWasteReportId { get; set; }
+    public WasteReport? TriggeringWasteReport { get; set; }
+
+    // Durable worker claim metadata. Attempt count belongs to the current AI phase;
+    // authoritative report verification resets it before the C2 continuation.
+    public Guid? ProcessingLeaseId { get; set; }
+    public DateTime? ProcessingLeaseExpiresAt { get; set; }
+    public int ProcessingAttemptCount { get; set; }
 
     /// <summary>
     /// Current authoritative workflow lifecycle status.
@@ -51,6 +62,15 @@ public class AgentWorkflow
     /// Optimistic concurrency token ensuring atomic and safe state transitions.
     /// </summary>
     public int Version { get; set; } = 1;
+
+    public void EnsureValidTrigger()
+    {
+        if ((TriggerType == AgentWorkflowTriggerType.ManualOperationalPlanning && TriggeringWasteReportId is null) ||
+            (TriggerType == AgentWorkflowTriggerType.CitizenReportSubmission && TriggeringWasteReportId is not null))
+            return;
+
+        throw new InvalidOperationException("AgentWorkflow trigger type and report ID must agree.");
+    }
 
     // Navigation collections
     public ICollection<AgentWorkflowStep> Steps { get; set; } = new List<AgentWorkflowStep>();

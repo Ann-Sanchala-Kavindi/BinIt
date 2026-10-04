@@ -68,6 +68,7 @@ void main() {
 
   WasteReportDetailModel createSampleReport({
     String id = 'rep-101',
+    String? reportReference,
     String citizenId = 'cit-1',
     String citizenName = 'Kamal Perera',
     String description = 'Large pile of mixed waste blocking public pavement.',
@@ -82,6 +83,7 @@ void main() {
   }) {
     return WasteReportDetailModel(
       id: id,
+      reportReference: reportReference,
       citizenId: citizenId,
       citizenName: citizenName,
       description: description,
@@ -200,6 +202,7 @@ void main() {
       expect(find.byKey(const Key('photo_thumbnail_att-2')), findsOneWidget);
 
       // Tap thumbnail opens photo preview dialog
+      await tester.ensureVisible(find.byKey(const Key('photo_thumbnail_att-1')));
       await tester.tap(find.byKey(const Key('photo_thumbnail_att-1')));
       await tester.pumpAndSettle();
 
@@ -330,6 +333,44 @@ void main() {
 
       expect(mockRepo.getReportCallCount, 2);
       expect(mockRepo.getHistoryCallCount, 2);
+    });
+
+    for (final nextStatus in [WasteReportStatus.underReview, WasteReportStatus.verified, WasteReportStatus.rejected]) {
+      testWidgets('pull-to-refresh shows ${nextStatus.displayName} from WasteReport without workflow state', (tester) async {
+        const id = 'c17add4f-79f3-4a0a-a9e0-150fde7d7827';
+        mockRepo.reportToReturn = createSampleReport(id: id, reportReference: 'C17ADD4F', status: nextStatus == WasteReportStatus.underReview ? WasteReportStatus.submitted : WasteReportStatus.underReview);
+        mockRepo.historyToReturn = [];
+        await tester.pumpWidget(createTestWidget(reportId: id));
+        await tester.pumpAndSettle();
+        expect(find.text('Report C17ADD4F'), findsOneWidget);
+
+        mockRepo.reportToReturn = createSampleReport(id: id, reportReference: 'C17ADD4F', status: nextStatus);
+        await tester.fling(find.byType(SingleChildScrollView), const Offset(0, 300), 1000);
+        await tester.pumpAndSettle();
+
+        expect(find.descendant(of: find.byKey(const Key('report_detail_summary_card')), matching: find.text(nextStatus.displayName)), findsOneWidget);
+        expect(mockRepo.getReportCallCount, 2);
+      });
+    }
+
+    testWidgets('failed refresh keeps the last authoritative status and offers retry', (tester) async {
+      mockRepo.reportToReturn = createSampleReport(status: WasteReportStatus.underReview);
+      mockRepo.historyToReturn = [];
+      await tester.pumpWidget(createTestWidget(reportId: 'rep-101'));
+      await tester.pumpAndSettle();
+
+      mockRepo.shouldThrowReport = true;
+      await tester.fling(find.byType(SingleChildScrollView), const Offset(0, 300), 1000);
+      await tester.pumpAndSettle();
+      expect(find.text('Under Review'), findsOneWidget);
+      expect(find.text("Couldn't refresh this report. Showing the last loaded status."), findsOneWidget);
+
+      mockRepo.shouldThrowReport = false;
+      mockRepo.reportToReturn = createSampleReport(status: WasteReportStatus.verified);
+      await tester.tap(find.byKey(const Key('report_detail_refresh_retry_button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Verified'), findsOneWidget);
+      expect(find.text("Couldn't refresh this report. Showing the last loaded status."), findsNothing);
     });
 
     testWidgets('responsive layout on narrow 320px viewport without overflow', (tester) async {

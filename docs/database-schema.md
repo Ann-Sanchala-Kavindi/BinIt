@@ -408,9 +408,10 @@ Source C: Active WasteBins Due for Routine Collection on Configured Weekdays (no
 
 #### Collection Need Item Projection (`CollectionNeedItemDto`)
 - `id`: Target ID (`WasteReportId` or `WasteBinId`).
+- `reportReference`: Display-only first eight uppercase UUID hex characters for report needs; no stored column and never an identity key.
 - `targetType`: `"Report"` or `"Bin"`.
 - `collectionReason`: `"VerifiedReport"`, `"FullOrBlockedBin"`, or `"RoutineCollection"`.
-- `title`: Short descriptive title (e.g. `BIN-COL-0042 (Full: 100%)` or `Verified Report: Pettah Market`).
+- `title`: Short descriptive title (e.g. `BIN-COL-0042 (Full: 100%)` or `Report <derived reference>: Pettah Market`).
 - `latitude`, `longitude`: Geospatial coordinates.
 - `addressText`: Location description.
 - `wasteType`: Primary or accepted waste categories.

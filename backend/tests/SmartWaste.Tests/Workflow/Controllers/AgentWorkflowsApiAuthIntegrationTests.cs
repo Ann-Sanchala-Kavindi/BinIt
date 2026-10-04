@@ -210,7 +210,7 @@ public class AgentWorkflowsApiAuthIntegrationTests
     // =========================================================================
 
     [Fact]
-    public async Task GetById_WasteOfficerAccessingOtherOfficersWorkflow_Returns404NotFound()
+    public async Task GetById_WasteOfficerAccessingOtherOfficersWorkflow_Returns200OK()
     {
         var (client, db, authService, scope) = CreateTestClient();
         using (scope)
@@ -235,8 +235,11 @@ public class AgentWorkflowsApiAuthIntegrationTests
             var req = CreateRequest(HttpMethod.Get, $"/api/v1/agent-workflows/{wfB.Id}", tokenA);
             var res = await client.SendAsync(req);
 
-            // Resource hiding policy: returns 404 Not Found rather than leaking existence
-            res.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            // Equal authority: WasteOfficer A can view WasteOfficer B's workflow
+            res.StatusCode.Should().Be(HttpStatusCode.OK);
+            var detail = await res.Content.ReadFromJsonAsync<AgentWorkflowDetailDto>(JsonOptions);
+            detail.Should().NotBeNull();
+            detail!.Id.Should().Be(wfB.Id);
         }
     }
 
@@ -283,7 +286,7 @@ public class AgentWorkflowsApiAuthIntegrationTests
     // =========================================================================
 
     [Fact]
-    public async Task Start_WasteOfficerOwnWorkflow_Returns200OKAndTransitionsToPlanning()
+    public async Task Start_WasteOfficerOwnWorkflow_Returns200OKAndAwaitsCollectionApproval()
     {
         var (client, db, authService, scope) = CreateTestClient();
         using (scope)
@@ -310,19 +313,22 @@ public class AgentWorkflowsApiAuthIntegrationTests
             res.StatusCode.Should().Be(HttpStatusCode.OK);
             var summary = await res.Content.ReadFromJsonAsync<AgentWorkflowSummaryDto>(JsonOptions);
             summary.Should().NotBeNull();
-            summary!.Status.Should().Be(AgentWorkflowStatus.Planning);
-            summary.CurrentStep.Should().Be(WorkflowStepType.SharedPlanning);
-            summary.Version.Should().Be(2);
+            summary!.Status.Should().Be(AgentWorkflowStatus.AwaitingCollectionApproval);
+            summary.CurrentStep.Should().Be(WorkflowStepType.CollectionPlanning);
+            summary.Version.Should().Be(3);
 
             // Verify persisted database state
             var persistedWf = await db.AgentWorkflows.AsNoTracking().Include(w => w.Transitions).FirstOrDefaultAsync(w => w.Id == wf.Id);
             persistedWf.Should().NotBeNull();
-            persistedWf!.Status.Should().Be(AgentWorkflowStatus.Planning);
-            persistedWf.CurrentStep.Should().Be(WorkflowStepType.SharedPlanning);
+            persistedWf!.Status.Should().Be(AgentWorkflowStatus.AwaitingCollectionApproval);
+            persistedWf.CurrentStep.Should().Be(WorkflowStepType.CollectionPlanning);
             persistedWf.Transitions.Should().Contain(t =>
                 t.FromStatus == AgentWorkflowStatus.Created &&
                 t.ToStatus == AgentWorkflowStatus.Planning &&
                 t.ChangedByUserId == officer.Id);
+            persistedWf.Transitions.Should().Contain(t =>
+                t.FromStatus == AgentWorkflowStatus.Planning &&
+                t.ToStatus == AgentWorkflowStatus.AwaitingCollectionApproval);
         }
     }
 
@@ -331,7 +337,7 @@ public class AgentWorkflowsApiAuthIntegrationTests
     // =========================================================================
 
     [Fact]
-    public async Task Start_WasteOfficerOtherOfficersWorkflow_Returns404NotFoundAndPreservesState()
+    public async Task Start_WasteOfficerOtherOfficersWorkflow_Returns200OKAndAwaitsCollectionApproval()
     {
         var (client, db, authService, scope) = CreateTestClient();
         using (scope)
@@ -342,7 +348,7 @@ public class AgentWorkflowsApiAuthIntegrationTests
             var wfB = new AgentWorkflow
             {
                 Id = Guid.NewGuid(),
-                Objective = "Officer B's workflow protected from officer A",
+                Objective = "Officer B's workflow started by officer A",
                 Status = AgentWorkflowStatus.Created,
                 CurrentStep = WorkflowStepType.None,
                 InitiatedByUserId = officerB.Id,
@@ -356,14 +362,18 @@ public class AgentWorkflowsApiAuthIntegrationTests
             var req = CreateRequest(HttpMethod.Post, $"/api/v1/agent-workflows/{wfB.Id}/start", tokenA);
             var res = await client.SendAsync(req);
 
-            res.StatusCode.Should().Be(HttpStatusCode.NotFound);
+            // Equal authority: WasteOfficer A can start WasteOfficer B's workflow
+            res.StatusCode.Should().Be(HttpStatusCode.OK);
+            var summary = await res.Content.ReadFromJsonAsync<AgentWorkflowSummaryDto>(JsonOptions);
+            summary.Should().NotBeNull();
+            summary!.Status.Should().Be(AgentWorkflowStatus.AwaitingCollectionApproval);
+            summary.CurrentStep.Should().Be(WorkflowStepType.CollectionPlanning);
 
-            // Verify database state is completely unchanged
             var persistedWf = await db.AgentWorkflows.AsNoTracking().Include(w => w.Transitions).FirstOrDefaultAsync(w => w.Id == wfB.Id);
             persistedWf.Should().NotBeNull();
-            persistedWf!.Status.Should().Be(AgentWorkflowStatus.Created);
-            persistedWf.CurrentStep.Should().Be(WorkflowStepType.None);
-            persistedWf.Transitions.Should().BeEmpty();
+            persistedWf!.Status.Should().Be(AgentWorkflowStatus.AwaitingCollectionApproval);
+            persistedWf.CurrentStep.Should().Be(WorkflowStepType.CollectionPlanning);
+            persistedWf.Transitions.Should().HaveCount(2);
         }
     }
 
@@ -400,7 +410,7 @@ public class AgentWorkflowsApiAuthIntegrationTests
             res.StatusCode.Should().Be(HttpStatusCode.OK);
             var summary = await res.Content.ReadFromJsonAsync<AgentWorkflowSummaryDto>(JsonOptions);
             summary.Should().NotBeNull();
-            summary!.Status.Should().Be(AgentWorkflowStatus.Planning);
+            summary!.Status.Should().Be(AgentWorkflowStatus.AwaitingCollectionApproval);
         }
     }
 

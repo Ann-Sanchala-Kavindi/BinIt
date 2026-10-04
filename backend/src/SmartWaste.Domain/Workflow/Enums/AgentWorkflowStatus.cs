@@ -48,9 +48,12 @@ public enum AgentWorkflowStatus
     /// </summary>
     Completed = 12,
 
-    /// <summary>Workflow proposal was authoritatively rejected by human reviewer (terminal).</summary>
+    /// <summary>Workflow proposal was rejected or its source report was withdrawn (terminal).</summary>
     Rejected = 13,
 
     /// <summary>Workflow encountered an unrecoverable failure (terminal).</summary>
-    Failed = 14
+    Failed = 14,
+
+    /// <summary>Exact-report C1 analysis completed; awaiting authoritative WasteReport review.</summary>
+    AwaitingReportVerification = 15
 }

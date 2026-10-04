@@ -6,6 +6,7 @@ import { WasteReportStatusBadge } from './WasteReportStatusBadge';
 import { WasteReportPriorityBadge } from './WasteReportPriorityBadge';
 import { Button } from '../../../components/ui/Button';
 import { useAuthStore } from '../../../store/authStore';
+import { reportLabel } from '../../../utils/displayReferences';
 
 export interface WasteReportsTableProps {
   reports: WasteReportSummaryDto[];
@@ -13,12 +14,6 @@ export interface WasteReportsTableProps {
   isFiltered: boolean;
   onClearFilters: () => void;
   detailBasePath?: string;
-}
-
-function formatReportRef(id: string): string {
-  // First 8 characters of the UUID uppercase as human-friendly ref
-  const cleanId = id.replace(/-/g, '');
-  return `#${cleanId.slice(0, 8).toUpperCase()}`;
 }
 
 function formatDate(isoString: string): string {
@@ -185,7 +180,7 @@ export const WasteReportsTable: React.FC<WasteReportsTableProps> = ({
                 ? report.addressText
                 : `${report.latitude.toFixed(5)}, ${report.longitude.toFixed(5)}`;
 
-            const shortRef = formatReportRef(report.id);
+            const shortRef = reportLabel(report.id, report.reportReference);
 
             return (
               <tr
@@ -199,7 +194,7 @@ export const WasteReportsTable: React.FC<WasteReportsTableProps> = ({
                     <Link
                       to={`${basePath}/${report.id}`}
                       className="font-mono text-[11px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200/60 transition-colors"
-                      title={`Full Report ID: ${report.id}`}
+                      title={`Open ${shortRef}`}
                     >
                       {shortRef}
                     </Link>

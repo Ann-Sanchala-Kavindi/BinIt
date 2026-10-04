@@ -13,6 +13,12 @@ vi.mock('../../../api/authApi', () => ({
   },
 }));
 
+vi.mock('../../../features/ai-approvals/api/agentWorkflowApi', () => ({
+  agentWorkflowApi: {
+    listWorkflows: vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, totalCount: 0, totalPages: 0 }),
+  },
+}));
+
 describe('MunicipalManager Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -385,7 +391,7 @@ describe('MunicipalManager Dashboard', () => {
     expect(screen.queryByText('Waste Officer Dashboard')).not.toBeInTheDocument();
   });
 
-  it('renders ComingSoon placeholder for protected manager subroutes and links back to /manager/dashboard', () => {
+  it('renders the shared AI Approvals dashboard for MunicipalManager', () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -404,13 +410,10 @@ describe('MunicipalManager Dashboard', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getAllByText('AI Approvals').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/under development/i)).toBeInTheDocument();
-
-    // Verify the back button links to /manager/dashboard and NOT /officer/dashboard
-    const backButton = screen.getByRole('link', { name: /back to dashboard/i });
-    expect(backButton).toBeInTheDocument();
-    expect(backButton).toHaveAttribute('href', '/manager/dashboard');
+    expect(screen.getByRole('heading', { name: 'AI Approvals' })).toBeInTheDocument();
+    expect(screen.getByText('Monitor Agentic AI workflows and manage collection operations.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New End-to-End Collection Operation' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'AI Approvals' })).toHaveAttribute('href', '/manager/ai-approvals');
   });
 
   it('ensures all remaining manager placeholder subroutes link back to /manager/dashboard', () => {
@@ -427,7 +430,6 @@ describe('MunicipalManager Dashboard', () => {
     });
 
     const managerSubroutes = [
-      '/manager/ai-approvals',
       '/manager/operations',
       '/manager/analytics',
       '/manager/audit',

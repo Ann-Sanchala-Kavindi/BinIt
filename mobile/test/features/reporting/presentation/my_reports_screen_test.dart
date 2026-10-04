@@ -68,6 +68,7 @@ class FakeReportingRepository extends ReportingRepository {
 
 WasteReportListItemModel createSampleReport({
   required String id,
+  String? reportReference,
   required String description,
   required WasteType wasteType,
   required WasteReportStatus status,
@@ -80,6 +81,7 @@ WasteReportListItemModel createSampleReport({
 }) {
   return WasteReportListItemModel(
     id: id,
+    reportReference: reportReference,
     description: description,
     wasteType: wasteType,
     status: status,
@@ -195,6 +197,31 @@ void main() {
       expect(find.descendant(of: find.byKey(const Key('report_card_rep-2')), matching: find.text('Under Review')), findsOneWidget);
       expect(find.text('Plastic containers and bags dumped on canal bank'), findsOneWidget);
       expect(find.text('6.9271, 79.8612'), findsOneWidget);
+    });
+
+    testWidgets('shows friendly references and authoritative statuses for the citizen review journey', (tester) async {
+      final ids = [
+        'a17add4f-79f3-4a0a-a9e0-150fde7d7827',
+        'b17add4f-79f3-4a0a-a9e0-150fde7d7827',
+        'c17add4f-79f3-4a0a-a9e0-150fde7d7827',
+        'd17add4f-79f3-4a0a-a9e0-150fde7d7827',
+      ];
+      final statuses = [WasteReportStatus.submitted, WasteReportStatus.underReview, WasteReportStatus.verified, WasteReportStatus.rejected];
+      fakeRepo.reportsToReturn = List.generate(ids.length, (index) => createSampleReport(
+        id: ids[index], reportReference: ids[index].substring(0, 8).toUpperCase(),
+        description: 'Reported waste item ${index + 1}', wasteType: WasteType.general, status: statuses[index],
+      ));
+
+      await tester.pumpWidget(createMyReportsTestApp(repository: fakeRepo));
+      await tester.pumpAndSettle();
+
+      for (final report in fakeRepo.reportsToReturn) {
+        final card = find.byKey(Key('report_card_${report.id}'));
+        await tester.scrollUntilVisible(card, 100, scrollable: find.descendant(of: find.byKey(const Key('my_reports_list_view')), matching: find.byType(Scrollable)));
+        expect(find.descendant(of: card, matching: find.text('Report ${report.reportReference}')), findsOneWidget);
+        expect(find.descendant(of: card, matching: find.text(report.status.displayName)), findsOneWidget);
+        expect(find.text(report.id), findsNothing);
+      }
     });
 
     testWidgets('renders all 8 WasteReport statuses with correct human-readable display names', (tester) async {

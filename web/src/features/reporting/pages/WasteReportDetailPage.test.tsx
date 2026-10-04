@@ -162,7 +162,7 @@ describe('WasteReportDetailPage', () => {
     renderWithClient(<WasteReportDetailPage />);
 
     // Header short reference
-    expect(await screen.findByText('#11111111')).toBeInTheDocument();
+    expect(await screen.findByText('Report 11111111')).toBeInTheDocument();
     expect(screen.getByText('Waste Report Details')).toBeInTheDocument();
 
     // Start Review action button is present for Submitted reports
@@ -716,10 +716,11 @@ describe('WasteReportDetailPage', () => {
     (reportingApi.getWasteReportHistory as ReturnType<typeof vi.fn>).mockResolvedValue(verifiedHistory);
 
     const confirmBtn = screen.getByTestId('confirm-verify-report-button');
+    await user.selectOptions(screen.getByLabelText('Verification priority'), 'High');
     await user.click(confirmBtn);
 
     // Assert API called
-    expect(reportingApi.verifyReport).toHaveBeenCalledWith(mockDetail.id);
+    expect(reportingApi.verifyReport).toHaveBeenCalledWith(mockDetail.id, 'High');
 
     // Modal closed
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -889,6 +890,7 @@ describe('WasteReportDetailPage', () => {
     await user.click(verifyBtn);
 
     const confirmBtn = screen.getByTestId('confirm-verify-report-button');
+    await user.selectOptions(screen.getByLabelText('Verification priority'), 'High');
 
     // Rapid double-clicks
     await user.click(confirmBtn);
@@ -934,6 +936,7 @@ describe('WasteReportDetailPage', () => {
     });
 
     const confirmBtn = screen.getByTestId('confirm-verify-report-button');
+    await user.selectOptions(screen.getByLabelText('Verification priority'), 'High');
     await user.click(confirmBtn);
 
     expect(
@@ -1007,6 +1010,7 @@ describe('WasteReportDetailPage', () => {
     await user.click(verifyBtn);
 
     const confirmBtn = screen.getByTestId('confirm-verify-report-button');
+    await user.selectOptions(screen.getByLabelText('Verification priority'), 'High');
     await user.click(confirmBtn);
 
     expect(
@@ -1023,6 +1027,7 @@ describe('WasteReportDetailPage', () => {
     (reportingApi.verifyReport as ReturnType<typeof vi.fn>).mockRejectedValueOnce(serverError);
 
     await user.click(screen.getByTestId('verify-report-button'));
+    await user.selectOptions(screen.getByLabelText('Verification priority'), 'High');
     await user.click(screen.getByTestId('confirm-verify-report-button'));
 
     expect(
@@ -1305,7 +1310,7 @@ describe('WasteReportDetailPage Role Access Guards', () => {
   });
 });
 
-describe('WasteReportDetailPage (MunicipalManager Read-Only Context)', () => {
+describe('WasteReportDetailPage (MunicipalManager Review Context)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAuthStore.setState({
@@ -1328,7 +1333,7 @@ describe('WasteReportDetailPage (MunicipalManager Read-Only Context)', () => {
     renderManagerWithClient(<WasteReportDetailPage />);
 
     // Short reference and title
-    expect(await screen.findByText('#11111111')).toBeInTheDocument();
+    expect(await screen.findByText('Report 11111111')).toBeInTheDocument();
     expect(screen.getByText('Waste Report Details')).toBeInTheDocument();
 
     // Citizen and description
@@ -1380,7 +1385,7 @@ describe('WasteReportDetailPage (MunicipalManager Read-Only Context)', () => {
     expect(screen.getByText('Under field assessment review')).toBeInTheDocument();
   });
 
-  it('does NOT render Start Review, Verify, Reject, or any mutation controls for Submitted status', async () => {
+  it('offers Start Review to MunicipalManager for a Submitted report', async () => {
     (reportingApi.getWasteReport as ReturnType<typeof vi.fn>).mockResolvedValue({
       ...mockDetail,
       status: 'Submitted',
@@ -1389,10 +1394,9 @@ describe('WasteReportDetailPage (MunicipalManager Read-Only Context)', () => {
 
     renderManagerWithClient(<WasteReportDetailPage />);
 
-    await screen.findByText('#11111111');
+    await screen.findByText('Report 11111111');
 
-    // No officer action buttons
-    expect(screen.queryByTestId('start-review-button')).toBeNull();
+    expect(screen.getByTestId('start-review-button')).toBeInTheDocument();
     expect(screen.queryByTestId('verify-report-button')).toBeNull();
     expect(screen.queryByTestId('reject-report-button')).toBeNull();
 
@@ -1401,11 +1405,9 @@ describe('WasteReportDetailPage (MunicipalManager Read-Only Context)', () => {
     expect(screen.queryByTestId('verify-report-modal')).toBeNull();
     expect(screen.queryByTestId('reject-report-modal')).toBeNull();
 
-    // Displays Read-Only Review Mode badge
-    expect(screen.getByText('Read-Only Review Mode')).toBeInTheDocument();
   });
 
-  it('does NOT render Start Review, Verify, Reject, or any mutation controls for UnderReview status', async () => {
+  it('offers Verify and Reject to MunicipalManager for an UnderReview report', async () => {
     (reportingApi.getWasteReport as ReturnType<typeof vi.fn>).mockResolvedValue({
       ...mockDetail,
       status: 'UnderReview',
@@ -1414,12 +1416,11 @@ describe('WasteReportDetailPage (MunicipalManager Read-Only Context)', () => {
 
     renderManagerWithClient(<WasteReportDetailPage />);
 
-    await screen.findByText('#11111111');
+    await screen.findByText('Report 11111111');
 
-    // No officer action buttons
     expect(screen.queryByTestId('start-review-button')).toBeNull();
-    expect(screen.queryByTestId('verify-report-button')).toBeNull();
-    expect(screen.queryByTestId('reject-report-button')).toBeNull();
+    expect(screen.getByTestId('verify-report-button')).toBeInTheDocument();
+    expect(screen.getByTestId('reject-report-button')).toBeInTheDocument();
 
     // Displays Under Review badge
     expect(screen.getAllByText('Under Review').length).toBeGreaterThanOrEqual(1);
@@ -1444,7 +1445,7 @@ describe('WasteReportDetailPage (MunicipalManager Read-Only Context)', () => {
 
       renderManagerWithClient(<WasteReportDetailPage />);
 
-      await screen.findByText('#11111111');
+      await screen.findByText('Report 11111111');
 
       expect(screen.queryByTestId('start-review-button')).toBeNull();
       expect(screen.queryByTestId('verify-report-button')).toBeNull();

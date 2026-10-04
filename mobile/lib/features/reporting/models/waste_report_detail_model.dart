@@ -7,6 +7,7 @@ import 'waste_type.dart';
 /// Mirrors ASP.NET Core WasteReportDetailDto response contract.
 class WasteReportDetailModel {
   final String id;
+  final String? reportReference;
   final String citizenId;
   final String citizenName;
   final String description;
@@ -25,6 +26,7 @@ class WasteReportDetailModel {
 
   const WasteReportDetailModel({
     required this.id,
+    this.reportReference,
     required this.citizenId,
     required this.citizenName,
     required this.description,
@@ -135,6 +137,7 @@ class WasteReportDetailModel {
 
     return WasteReportDetailModel(
       id: id,
+      reportReference: json['reportReference'] as String?,
       citizenId: citizenId,
       citizenName: citizenName,
       description: description,
@@ -156,6 +159,7 @@ class WasteReportDetailModel {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      if (reportReference != null) 'reportReference': reportReference,
       'citizenId': citizenId,
       'citizenName': citizenName,
       'description': description,
@@ -180,6 +184,7 @@ class WasteReportDetailModel {
       other is WasteReportDetailModel &&
           runtimeType == other.runtimeType &&
           id == other.id &&
+          reportReference == other.reportReference &&
           citizenId == other.citizenId &&
           description == other.description &&
           wasteType == other.wasteType &&
@@ -191,6 +196,7 @@ class WasteReportDetailModel {
   @override
   int get hashCode =>
       id.hashCode ^
+      reportReference.hashCode ^
       citizenId.hashCode ^
       description.hashCode ^
       wasteType.hashCode ^

@@ -1,12 +1,13 @@
 import sys
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
 
 from app.core.config import get_settings
 from app.models.collection_needs import CollectionNeedToolItem, CollectionNeedsToolResponse
+from app.agents.collection_planning_agent import COLLECTION_PLANNING_SYSTEM_PROMPT, _format_prompt_data
 from app.tools.collection_needs import (
     COLLECTION_NEEDS_PATH,
     INTERNAL_AUTH_HEADER,
@@ -63,6 +64,25 @@ def _response(items=None, page=1, page_size=20, total_count=None):
         "totalCount": total_count,
         "totalPages": (total_count + page_size - 1) // page_size,
     }
+
+
+def test_display_metadata_is_parsed_without_replacing_canonical_need_ids():
+    report_payload = _item("Report")
+    report_payload["wasteReportId"] = report_payload["id"]
+    report_payload["reportReference"] = report_payload["id"].replace("-", "")[:8].upper()
+    bin_payload = _item("Bin")
+    bin_payload["wasteBinId"] = bin_payload["id"]
+    bin_payload["binCode"] = "BIN-COL-0042"
+    report = CollectionNeedToolItem.model_validate(report_payload)
+    bin_need = CollectionNeedToolItem.model_validate(bin_payload)
+    context = _format_prompt_data([report, bin_need])
+    assert report.id == UUID(report_payload["id"])
+    assert bin_need.id == UUID(bin_payload["id"])
+    assert f'"reportReference": "{report_payload["reportReference"]}"' in context
+    assert '"binCode": "BIN-COL-0042"' in context
+    assert str(report.id) in context
+    assert str(bin_need.id) in context
+    assert "full needId values unchanged" in COLLECTION_PLANNING_SYSTEM_PROMPT
 
 
 def _http_response(status, payload=None):

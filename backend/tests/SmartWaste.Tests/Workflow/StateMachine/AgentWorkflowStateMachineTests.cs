@@ -16,8 +16,13 @@ public class AgentWorkflowStateMachineTests
 
     [Theory]
     [InlineData(AgentWorkflowStatus.Created, AgentWorkflowStatus.Planning)] // A
+    [InlineData(AgentWorkflowStatus.Created, AgentWorkflowStatus.Rejected)] // Source report cancelled before AI starts.
     [InlineData(AgentWorkflowStatus.Planning, AgentWorkflowStatus.AwaitingCollectionApproval)] // C
     [InlineData(AgentWorkflowStatus.Planning, AgentWorkflowStatus.Failed)] // D
+    [InlineData(AgentWorkflowStatus.Planning, AgentWorkflowStatus.Rejected)] // Source report cancelled during C1.
+    [InlineData(AgentWorkflowStatus.Planning, AgentWorkflowStatus.AwaitingReportVerification)]
+    [InlineData(AgentWorkflowStatus.AwaitingReportVerification, AgentWorkflowStatus.Planning)]
+    [InlineData(AgentWorkflowStatus.AwaitingReportVerification, AgentWorkflowStatus.Rejected)]
     [InlineData(AgentWorkflowStatus.AwaitingCollectionApproval, AgentWorkflowStatus.CollectionApproved)] // E
     [InlineData(AgentWorkflowStatus.AwaitingCollectionApproval, AgentWorkflowStatus.CollectionNeedsRevision)] // F
     [InlineData(AgentWorkflowStatus.AwaitingCollectionApproval, AgentWorkflowStatus.Rejected)] // G
@@ -106,6 +111,7 @@ public class AgentWorkflowStateMachineTests
     [InlineData(AgentWorkflowStatus.Created, AgentWorkflowStatus.Completed)]
     [InlineData(AgentWorkflowStatus.Created, AgentWorkflowStatus.FleetPlanning)]
     [InlineData(AgentWorkflowStatus.AwaitingCollectionApproval, AgentWorkflowStatus.FleetPlanning)]
+    [InlineData(AgentWorkflowStatus.AwaitingReportVerification, AgentWorkflowStatus.CollectionApproved)]
     [InlineData(AgentWorkflowStatus.CreatingScheduledTasks, AgentWorkflowStatus.Completed)]
     public void CanTransition_ArbitrarySkipping_ReturnsFalse_AndThrows(AgentWorkflowStatus from, AgentWorkflowStatus to)
     {
@@ -131,11 +137,11 @@ public class AgentWorkflowStateMachineTests
     }
 
     [Fact]
-    public void LegalTransitions_HasExactlyTwentySixLegalTransitions()
+    public void LegalTransitions_HasExactlyThirtyOneLegalTransitions()
     {
         var allStatuses = Enum.GetValues<AgentWorkflowStatus>();
         var totalTransitions = allStatuses.Sum(s => _sut.GetPermittedTransitions(s).Count);
-        totalTransitions.Should().Be(26);
+        totalTransitions.Should().Be(31);
     }
 
     [Fact]

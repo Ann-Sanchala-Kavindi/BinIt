@@ -105,8 +105,8 @@ describe('WasteReportsPage (Operational List)', () => {
     expect(screen.getByText('Chemical drums left near lake bank')).toBeInTheDocument();
 
     // Human-friendly shortened ID references
-    expect(screen.getByText('#11111111')).toBeInTheDocument();
-    expect(screen.getByText('#22222222')).toBeInTheDocument();
+    expect(screen.getByText('Report 11111111')).toBeInTheDocument();
+    expect(screen.getByText('Report 22222222')).toBeInTheDocument();
 
     // Categories
     expect(screen.getAllByText('General').length).toBeGreaterThanOrEqual(1);

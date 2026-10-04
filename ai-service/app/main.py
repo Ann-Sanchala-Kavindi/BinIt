@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 
 from app.api.health import router as health_router
+from app.api.orchestration import router as orchestration_router
 from app.core.config import get_settings
 from app.core.logging import setup_logging
 
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
     )
 
     application.include_router(health_router)
+    application.include_router(orchestration_router)
     return application
 
 

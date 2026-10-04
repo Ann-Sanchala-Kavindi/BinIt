@@ -13,12 +13,20 @@ public class AgentWorkflowStateMachine : IAgentWorkflowStateMachine
     {
         [AgentWorkflowStatus.Created] = new()
         {
-            AgentWorkflowStatus.Planning
+            AgentWorkflowStatus.Planning,
+            AgentWorkflowStatus.Rejected
         },
         [AgentWorkflowStatus.Planning] = new()
         {
+            AgentWorkflowStatus.AwaitingReportVerification,
             AgentWorkflowStatus.AwaitingCollectionApproval,
+            AgentWorkflowStatus.Rejected,
             AgentWorkflowStatus.Failed
+        },
+        [AgentWorkflowStatus.AwaitingReportVerification] = new()
+        {
+            AgentWorkflowStatus.Planning,
+            AgentWorkflowStatus.Rejected
         },
         [AgentWorkflowStatus.AwaitingCollectionApproval] = new()
         {

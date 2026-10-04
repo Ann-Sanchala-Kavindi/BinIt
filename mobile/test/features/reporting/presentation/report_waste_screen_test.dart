@@ -177,7 +177,7 @@ class FakeReportSubmissionService extends ReportSubmissionService {
     return resultToReturn ??
         ReportSubmissionFullSuccess(
           report: WasteReportDetailModel(
-            id: 'mock-report-12345678-abcd',
+            id: 'c17add4f-79f3-4a0a-a9e0-150fde7d7827',
             citizenId: 'citizen-1',
             citizenName: 'Test Citizen',
             wasteType: request.wasteType,
@@ -191,7 +191,7 @@ class FakeReportSubmissionService extends ReportSubmissionService {
           uploadedAttachments: images
               .map((img) => ReportAttachmentModel(
                     id: 'att-${img.fileName}',
-                    wasteReportId: 'mock-report-12345678-abcd',
+                    wasteReportId: 'c17add4f-79f3-4a0a-a9e0-150fde7d7827',
                     fileUrl: 'https://example.com/${img.fileName}',
                     fileType: img.fileType,
                     createdAt: DateTime.utc(2026, 9, 16, 12, 0, 0),
@@ -1059,6 +1059,45 @@ void main() {
       expect(find.text('Report Submitted'), findsOneWidget);
       expect(find.text('No photos attached.'), findsOneWidget);
       expect(find.byKey(const Key('submission_success_reference_text')), findsOneWidget);
+      expect(find.text('Report C17ADD4F'), findsOneWidget);
+    });
+
+    testWidgets('submission success displays the backend report reference', (tester) async {
+      final fakeService = FakeReportSubmissionService(
+        resultToReturn: ReportSubmissionFullSuccess(
+          report: WasteReportDetailModel(
+            id: 'c17add4f-79f3-4a0a-a9e0-150fde7d7827',
+            reportReference: 'A1B2C3D4',
+            citizenId: 'citizen-1',
+            citizenName: 'Test Citizen',
+            wasteType: WasteType.general,
+            status: WasteReportStatus.submitted,
+            description: 'Overflowing dumpster behind market area',
+            latitude: 6.9200,
+            longitude: 79.8600,
+            createdAt: DateTime.utc(2026, 9, 16, 12),
+          ),
+          uploadedAttachments: const [],
+        ),
+      );
+
+      await tester.pumpWidget(createReportWasteTestApp(
+        initialWasteType: WasteType.general,
+        initialDescription: 'Overflowing dumpster behind market area',
+        initialLatitude: 6.9200,
+        initialLongitude: 79.8600,
+        submissionService: fakeService,
+      ));
+      await tester.pumpAndSettle();
+
+      final submitBtn = find.byKey(const Key('submit_report_button'));
+      await tester.ensureVisible(submitBtn);
+      await tester.tap(submitBtn);
+      await tester.pumpAndSettle();
+
+      expect(fakeService.submitReportCallCount, 1);
+      expect(find.text('Report A1B2C3D4'), findsOneWidget);
+      expect(find.text('Report C17ADD4F'), findsNothing);
     });
 
     testWidgets('full success with 3 photos uploads all photos and displays dialog', (tester) async {

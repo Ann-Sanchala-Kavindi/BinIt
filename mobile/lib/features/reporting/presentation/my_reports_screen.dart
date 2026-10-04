@@ -9,6 +9,7 @@ import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_loading_indicator.dart';
 import '../data/reporting_repository.dart';
 import '../models/paged_waste_reports_model.dart';
+import '../models/report_reference.dart';
 import '../models/waste_report_list_item_model.dart';
 import '../models/waste_report_status.dart';
 import '../models/waste_type.dart';
@@ -672,6 +673,18 @@ class MyReportsScreenState extends State<MyReportsScreen> {
           ),
 
           const SizedBox(height: AppSpacing.sm),
+
+          Text(
+            reportLabel(report.id, authoritative: report.reportReference),
+            key: Key('report_reference_${report.id}'),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primaryDark,
+            ),
+          ),
+
+          const SizedBox(height: AppSpacing.xs),
 
           // Description Preview
           Text(

@@ -18,11 +18,8 @@ import { Button } from '../../../components/ui/Button';
 import { Alert } from '../../../components/ui/Alert';
 import { useAuthStore } from '../../../store/authStore';
 import { WASTE_TYPE_LABELS } from '../types/reporting';
-
-function formatReportRef(id: string): string {
-  const cleanId = id.replace(/-/g, '');
-  return `#${cleanId.slice(0, 8).toUpperCase()}`;
-}
+import { reportLabel, reportReference } from '../../../utils/displayReferences';
+import { canReviewWasteReports } from '../utils/reportReviewAuthority';
 
 function formatDate(isoString: string): string {
   try {
@@ -46,7 +43,7 @@ export const WasteReportDetailPage: React.FC = () => {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
-  const isOfficer = user?.role === 'WasteOfficer';
+  const canReview = canReviewWasteReports(user?.role);
   const listPath = user?.role === 'MunicipalManager' ? '/manager/reports' : '/officer/waste-reports';
 
   const [isStartReviewModalOpen, setIsStartReviewModalOpen] = useState(false);
@@ -283,7 +280,7 @@ export const WasteReportDetailPage: React.FC = () => {
     );
   }
 
-  const shortRef = formatReportRef(report.id);
+  const shortRef = reportLabel(report.id, report.reportReference);
   const locationText =
     report.addressText && report.addressText.trim()
       ? report.addressText
@@ -346,13 +343,13 @@ export const WasteReportDetailPage: React.FC = () => {
               Waste Report Details
             </h1>
             <p className="text-xs text-slate-500 mt-1 font-mono">
-              ID: {report.id}
+              Reference: {reportReference(report.id, report.reportReference)}
             </p>
           </div>
 
-          {/* Action Area — Start Review for Submitted; Verify & Reject for UnderReview (WasteOfficer only) */}
+          {/* Report lifecycle actions are available to authorized staff. */}
           <div className="flex items-center sm:justify-end gap-3">
-            {isOfficer && report.status === 'Submitted' ? (
+            {canReview && report.status === 'Submitted' ? (
               <Button
                 type="button"
                 variant="primary"
@@ -370,7 +367,7 @@ export const WasteReportDetailPage: React.FC = () => {
                 </svg>
                 <span>Start Review</span>
               </Button>
-            ) : isOfficer && report.status === 'UnderReview' ? (
+            ) : canReview && report.status === 'UnderReview' ? (
               <div className="flex items-center gap-2.5">
                 <Button
                   type="button"
@@ -573,8 +570,8 @@ export const WasteReportDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Officer action modals — rendered exclusively for WasteOfficer */}
-      {isOfficer && (
+      {/* Authoritative report actions are shared by managers and officers. */}
+      {canReview && (
         <>
           <StartReviewModal
             isOpen={isStartReviewModalOpen}

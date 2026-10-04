@@ -166,13 +166,13 @@ public class WasteReportsController : ControllerBase
     }
 
     /// <summary>
-    /// Waste Officer initiates formal review of a Submitted report (Submitted -> UnderReview).
+    /// Authorized staff initiates formal review of a Submitted report (Submitted -> UnderReview).
     /// </summary>
     /// <param name="id">The report unique identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Updated waste report details.</returns>
     [HttpPost("{id:guid}/start-review")]
-    [Authorize(Roles = AppRoles.WasteOfficer)]
+    [Authorize(Roles = AppRoles.AgentWorkflowAuthorityRoles)]
     [ProducesResponseType(typeof(WasteReportDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -192,13 +192,13 @@ public class WasteReportsController : ControllerBase
     }
 
     /// <summary>
-    /// Waste Officer verifies an inspected report (UnderReview -> Verified).
+    /// Authorized staff verifies an inspected report with an explicit priority (UnderReview -> Verified).
     /// </summary>
     /// <param name="id">The report unique identifier.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Updated waste report details.</returns>
     [HttpPost("{id:guid}/verify")]
-    [Authorize(Roles = AppRoles.WasteOfficer)]
+    [Authorize(Roles = AppRoles.AgentWorkflowAuthorityRoles)]
     [ProducesResponseType(typeof(WasteReportDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -219,14 +219,14 @@ public class WasteReportsController : ControllerBase
     }
 
     /// <summary>
-    /// Waste Officer rejects an invalid or duplicate report (UnderReview -> Rejected).
+    /// Authorized staff rejects an invalid or duplicate report (UnderReview -> Rejected).
     /// </summary>
     /// <param name="id">The report unique identifier.</param>
     /// <param name="request">Rejection reason payload.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>Updated waste report details.</returns>
     [HttpPost("{id:guid}/reject")]
-    [Authorize(Roles = AppRoles.WasteOfficer)]
+    [Authorize(Roles = AppRoles.AgentWorkflowAuthorityRoles)]
     [ProducesResponseType(typeof(WasteReportDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]

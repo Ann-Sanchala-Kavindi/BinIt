@@ -67,6 +67,9 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
             if (!_createdReportIds.IsEmpty)
             {
                 var reportIds = _createdReportIds.ToList();
+                await db.AgentWorkflows
+                    .Where(w => w.TriggeringWasteReportId.HasValue && reportIds.Contains(w.TriggeringWasteReportId.Value))
+                    .ExecuteDeleteAsync();
                 await db.WasteReportStatusHistories
                     .Where(h => reportIds.Contains(h.WasteReportId))
                     .ExecuteDeleteAsync();
@@ -434,13 +437,16 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
         var rVerified = await CreateReportViaHttpAsync(citizenToken);
         var revReq3 = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{rVerified.Id}/start-review", officerToken);
         await _client.SendAsync(revReq3);
-        var verReq3 = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{rVerified.Id}/verify", officerToken);
+        await ReportWorkflowTestPreparation.MarkAwaitingVerificationAsync(_factory.Services, rVerified.Id);
+        var verReq3 = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{rVerified.Id}/verify", officerToken,
+            new VerifyWasteReportRequest { Priority = WasteReportPriority.High });
         (await _client.SendAsync(verReq3)).StatusCode.Should().Be(HttpStatusCode.OK);
 
         // 4. Report in Rejected status
         var rRejected = await CreateReportViaHttpAsync(citizenToken);
         var revReq4 = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{rRejected.Id}/start-review", officerToken);
         await _client.SendAsync(revReq4);
+        await ReportWorkflowTestPreparation.MarkAwaitingVerificationAsync(_factory.Services, rRejected.Id);
         var rejReq4 = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{rRejected.Id}/reject", officerToken,
             new RejectWasteReportRequest { Reason = "Invalid location outside municipality" });
         (await _client.SendAsync(rejReq4)).StatusCode.Should().Be(HttpStatusCode.OK);
@@ -834,11 +840,11 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // 13. VERIFY PERSISTENCE & PRIORITY NULL INVARIANT IN POSTGRESQL
+    // 13. VERIFY PERSISTENCE & EXPLICIT PRIORITY IN POSTGRESQL
     // ──────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Verify_PersistsInPostgreSql_SetsVerifierMetadata_PriorityRemainsNull()
+    public async Task Verify_PersistsInPostgreSql_SetsVerifierMetadata_AndSelectedPriority()
     {
         var (citizenToken, _) = await RegisterCitizenAsync("Verify Citizen");
         var officerToken = await GetOfficerTokenAsync();
@@ -850,7 +856,9 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
         await _client.SendAsync(reviewReq);
 
         // 2. Verify
-        var verifyReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", officerToken);
+        await ReportWorkflowTestPreparation.MarkAwaitingVerificationAsync(_factory.Services, report.Id);
+        var verifyReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", officerToken,
+            new VerifyWasteReportRequest { Priority = WasteReportPriority.Urgent });
         var verifyRes = await _client.SendAsync(verifyReq);
         verifyRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
@@ -864,8 +872,7 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
         dbReport.VerifiedAt!.Value.Kind.Should().Be(DateTimeKind.Utc);
         dbReport.UpdatedAt.Should().NotBeNull();
 
-        // CRITICAL INVARIANT: Priority remains strictly NULL in Component 1
-        dbReport.Priority.Should().BeNull("Component 1 verification must NEVER assign Priority");
+        dbReport.Priority.Should().Be(WasteReportPriority.Urgent);
 
         var historyRows = await db.WasteReportStatusHistories
             .Where(h => h.WasteReportId == report.Id)
@@ -896,6 +903,7 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
         await _client.SendAsync(reviewReq);
 
         // Reject
+        await ReportWorkflowTestPreparation.MarkAwaitingVerificationAsync(_factory.Services, report.Id);
         var rejectionReason = "Duplicate report already covered by regular route";
         var rejectReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/reject", officerToken,
             new RejectWasteReportRequest { Reason = rejectionReason });
@@ -934,7 +942,8 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
         var report = await CreateReportViaHttpAsync(citizenToken);
 
         // 1. Submitted -> verify directly (illegal, must start review first) -> 409 Conflict
-        var illegalVerify = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", officerToken);
+        var illegalVerify = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", officerToken,
+            new VerifyWasteReportRequest { Priority = WasteReportPriority.High });
         var res1 = await _client.SendAsync(illegalVerify);
         res1.StatusCode.Should().Be(HttpStatusCode.Conflict);
 
@@ -954,7 +963,9 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
         res3.StatusCode.Should().Be(HttpStatusCode.Conflict);
 
         // 5. Verify report
-        var verifyReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", officerToken);
+        await ReportWorkflowTestPreparation.MarkAwaitingVerificationAsync(_factory.Services, report.Id);
+        var verifyReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", officerToken,
+            new VerifyWasteReportRequest { Priority = WasteReportPriority.High });
         await _client.SendAsync(verifyReq);
 
         // 6. Verified -> reject -> 409 Conflict
@@ -991,13 +1002,15 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
         reviewRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // 2. Reject
+        await ReportWorkflowTestPreparation.MarkAwaitingVerificationAsync(_factory.Services, report.Id);
         var rejectReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/reject", officerToken,
             new RejectWasteReportRequest { Reason = "Invalid report location outside municipal area" });
         var rejectRes = await _client.SendAsync(rejectReq);
         rejectRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // 3. Attempt illegal verify on Rejected report -> 409 Conflict
-        var verifyReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", officerToken);
+        var verifyReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", officerToken,
+            new VerifyWasteReportRequest { Priority = WasteReportPriority.High });
         var verifyRes = await _client.SendAsync(verifyReq);
         verifyRes.StatusCode.Should().Be(HttpStatusCode.Conflict);
 
@@ -1037,8 +1050,10 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
 
         var revReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/start-review", officerToken);
         await _client.SendAsync(revReq);
+        await ReportWorkflowTestPreparation.MarkAwaitingVerificationAsync(_factory.Services, report.Id);
 
-        var verReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", officerToken);
+        var verReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", officerToken,
+            new VerifyWasteReportRequest { Priority = WasteReportPriority.High });
         await _client.SendAsync(verReq);
 
         var historyReq = CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/waste-reports/{report.Id}/history", officerToken);
@@ -1057,11 +1072,11 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // 17. MUNICIPAL MANAGER READ-ONLY & DRIVER FORBIDDEN
+    // 17. MUNICIPAL MANAGER REPORT REVIEW & DRIVER FORBIDDEN
     // ──────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task MunicipalManager_IsReadOnly_AndDriverIsForbiddenInPostgreSql()
+    public async Task MunicipalManager_CanReviewReports_AndDriverIsForbiddenInPostgreSql()
     {
         var (citizenToken, _) = await RegisterCitizenAsync("Role Citizen");
         var managerToken = await GetManagerTokenAsync();
@@ -1079,7 +1094,7 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
         var historyRes = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Get, $"/api/v1/waste-reports/{report.Id}/history", managerToken));
         historyRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
-        // Manager Write/Review operations -> 403 Forbidden
+        // Manager citizen-only write operations remain forbidden.
         var createRes = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Post, "/api/v1/waste-reports", managerToken,
             new CreateWasteReportRequest { Description = "Manager report attempt", WasteType = WasteType.General, Latitude = 6.9, Longitude = 79.8 }));
         createRes.StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -1091,15 +1106,25 @@ public class WasteReportPostgreSqlIntegrationTests : IAsyncLifetime
         var deleteRes = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Delete, $"/api/v1/waste-reports/{report.Id}", managerToken));
         deleteRes.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
+        // Manager can perform authoritative report review decisions.
         var reviewRes = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/start-review", managerToken));
-        reviewRes.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        reviewRes.StatusCode.Should().Be(HttpStatusCode.OK);
+        await ReportWorkflowTestPreparation.MarkAwaitingVerificationAsync(_factory.Services, report.Id);
 
-        var verifyRes = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", managerToken));
-        verifyRes.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var verifyRes = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/verify", managerToken,
+            new VerifyWasteReportRequest { Priority = WasteReportPriority.Medium }));
+        verifyRes.StatusCode.Should().Be(HttpStatusCode.OK);
+        var verified = await verifyRes.Content.ReadFromJsonAsync<WasteReportDetailDto>(JsonOptions);
+        verified!.Priority.Should().Be(WasteReportPriority.Medium);
 
-        var rejectRes = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report.Id}/reject", managerToken,
-            new RejectWasteReportRequest { Reason = "Manager reject attempt" }));
-        rejectRes.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var rejectedReport = await CreateReportViaHttpAsync(citizenToken);
+        (await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Post,
+            $"/api/v1/waste-reports/{rejectedReport.Id}/start-review", managerToken))).StatusCode.Should().Be(HttpStatusCode.OK);
+        await ReportWorkflowTestPreparation.MarkAwaitingVerificationAsync(_factory.Services, rejectedReport.Id);
+        var rejectRes = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Post,
+            $"/api/v1/waste-reports/{rejectedReport.Id}/reject", managerToken,
+            new RejectWasteReportRequest { Reason = "Duplicate report submitted." }));
+        rejectRes.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Driver operations -> 403 Forbidden
         var driverList = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Get, "/api/v1/waste-reports", driverToken));

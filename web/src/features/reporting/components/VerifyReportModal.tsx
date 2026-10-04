@@ -7,6 +7,7 @@ export interface VerifyReportModalProps {
   isSubmitting: boolean;
   onConfirm: (priority: WasteReportPriority) => void;
   onCancel: () => void;
+  aiRecommendedPriority?: WasteReportPriority | null;
 }
 
 export const VerifyReportModal: React.FC<VerifyReportModalProps> = ({
@@ -14,8 +15,12 @@ export const VerifyReportModal: React.FC<VerifyReportModalProps> = ({
   isSubmitting,
   onConfirm,
   onCancel,
+  aiRecommendedPriority,
 }) => {
   const [priority, setPriority] = useState<WasteReportPriority | ''>('');
+  useEffect(() => {
+    if (isOpen) setPriority('');
+  }, [isOpen]);
   useEffect(() => {
     if (!isOpen) return;
 
@@ -70,6 +75,7 @@ export const VerifyReportModal: React.FC<VerifyReportModalProps> = ({
             </p>
           </div>
         </div>
+        {aiRecommendedPriority && <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">AI advisory recommendation: <strong>{aiRecommendedPriority}</strong>. Select the final priority yourself.</p>}
         <label className="block text-sm font-semibold text-slate-800">Priority <span className="text-rose-600">*</span><select aria-label="Verification priority" value={priority} disabled={isSubmitting} onChange={(e) => setPriority(e.target.value as WasteReportPriority)} className="mt-2 block w-full rounded-lg border border-slate-300 px-3 py-2"><option value="">Select priority</option>{(['Low', 'Medium', 'High', 'Urgent'] as WasteReportPriority[]).map((value) => <option key={value}>{value}</option>)}</select></label>
 
         <div className="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-slate-100">

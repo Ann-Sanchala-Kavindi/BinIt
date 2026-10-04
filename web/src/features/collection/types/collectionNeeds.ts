@@ -14,6 +14,7 @@ export interface CollectionNeedBinDetailsDto {
 
 export interface CollectionNeedItemDto {
   id: string;
+  reportReference?: string | null;
   targetType: CollectionNeedTargetType;
   collectionReason: CollectionNeedReason;
   title: string;

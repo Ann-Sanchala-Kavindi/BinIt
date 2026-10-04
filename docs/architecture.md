@@ -303,6 +303,7 @@ To ensure distinct individual academic contributions while maintaining architect
 2. **Waste Analysis Agent (Student 1 — Component 1)**:
    - **Responsibility:** Analyses already-verified WasteReports and produces a structured, non-authoritative operational assessment for downstream collection planning.
    - **Allowed Tools:** Strictly allow-listed `get_verified_waste_reports` tool (retrieving authoritative `Verified` reports via ASP.NET Core internal authenticated endpoint). Zero direct PostgreSQL or Supabase access.
+   - An additive internal exact-report read endpoint is available for a future citizen-report advisory verification path. Current manual C1 execution continues to use verified reports; trigger-aware Python behavior is deferred.
    - **Input Contract (`WasteAnalysisRequest`):** `objective` (string, 5-500 chars), `page` (int >= 1), `page_size` (int 1-50).
    - **Structured Output Contract (`WasteAnalysisResult` / `WasteReportAnalysis`):** `reportId`, `categoryAssessment`, `recommendedPriority` (`Low`, `Medium`, `High`, `Urgent`), `operationalConcerns` (0-5 items), `recommendedHandling`, `confidence` (`Low`, `Medium`, `High`), `rationale`.
    - **Advisory Recommendation Semantics:** `recommendedPriority` is purely advisory for downstream planning; it NEVER mutates authoritative `WasteReport.Priority` or `WasteReport.Status` in the database.
@@ -361,7 +362,18 @@ The integration of generative and agentic AI is bounded by strict software engin
 
 ---
 
-## 10. Future Integrations (Third-Party Services)
+## 10. Agentic Workflow Dispatch Review
+
+The shared React AI Approvals detail is available to both `WasteOfficer` and `MunicipalManager` roles. It renders the persisted C3 Fleet & Route proposal and C4 Operational Validation result, including unplanned tasks and the recorded validation outcome, without treating the client as an execution authority.
+
+- `AwaitingDispatchApproval` exposes explicit approve, revision, and reject decisions only when persisted C4 reports `ReadyForHumanReview`. A required C4 warning acknowledgement must be deliberately checked and is sent as `acknowledgeWarnings`; it is never inferred from client state.
+- Dispatch approval and execution are separate POST operations. Approval records the `FleetDispatch` decision. Only `DispatchApproved` exposes execution, which sends just the workflow ID and optimistic-concurrency version; React never posts a fleet plan, route, task list, driver, or vehicle selection.
+- ASP.NET revalidates the approved C3/C4 snapshot and current authoritative task, driver, vehicle, and compatibility state before atomically creating `CollectionAssignment` records. `Completed` therefore means planning and approved assignment creation completed, not physical route completion.
+- The UI refreshes workflow detail and list queries after every outcome. It reports `409 Conflict` as a stale workflow, treats unknown transport outcomes as unconfirmed, and never automatically retries a decision or execution request.
+
+---
+
+## 11. Future Integrations (Third-Party Services)
 
 Future development phases will incorporate external services under strict encapsulation:
 - **Routing & Maps**: Manual C3 stop ordering is fully usable without a provider. A future separately approved server-side routing provider may calculate road geometry, distance, duration, or a suggested multi-stop order according to its actual capabilities. Calculating a route for a supplied order is not optimisation. Any provider key remains private to the backend; React and Flutter never call it directly and retain manual ordering when it is unavailable.
@@ -370,7 +382,7 @@ Future development phases will incorporate external services under strict encaps
 
 ---
 
-## 11. Security & Compliance Architecture
+## 12. Security & Compliance Architecture
 
 - **Authentication**: Stateless HMAC-SHA256 JWT access tokens issued by ASP.NET Core with strict expiration and cryptographic validation.
 - **Client Platform Role Policy**:
@@ -390,7 +402,7 @@ Future development phases will incorporate external services under strict encaps
 
 ---
 
-## 12. Deployment Architecture Concept
+## 13. Deployment Architecture Concept
 
 The entire SmartWaste platform is designed for containerized or modular deployment:
 

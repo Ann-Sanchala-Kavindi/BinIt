@@ -21,6 +21,8 @@ from app.agents.waste_analysis_agent import (
     validate_coverage,
     validate_no_attachment_claims,
 )
+from app.core.config import Settings
+from app.core.llm import invoke_chat_model
 from app.models.analysis import (
     AnalysisConfidence,
     RecommendedPriority,
@@ -222,6 +224,55 @@ class TestWasteAnalysisAgent:
         analysis2 = next(a for a in result.analyses if a.report_id == id2)
         assert analysis2.recommended_priority == RecommendedPriority.MEDIUM
         assert analysis2.confidence == AnalysisConfidence.MEDIUM
+
+    @patch("app.agents.waste_analysis_agent.fetch_verified_waste_reports")
+    def test_model_override_uses_shared_helper_without_gemini_rate_delay(self, mock_fetch):
+        """An offline override uses the shared helper but is never throttled as Gemini."""
+        report_id = uuid4()
+        mock_fetch.return_value = VerifiedWasteReportsResponse(
+            items=[_create_mock_verified_item(report_id)],
+            total_count=1,
+            page=1,
+            page_size=20,
+            total_pages=1,
+        )
+        model = GenericFakeChatModel(
+            messages=iter(
+                [
+                    AIMessage(
+                        content=_create_mock_analysis_payload(
+                            [
+                                {
+                                    "reportId": str(report_id),
+                                    "categoryAssessment": "organic food waste",
+                                    "recommendedPriority": "High",
+                                    "operationalConcerns": ["decomposition odor"],
+                                    "recommendedHandling": "organic waste collection",
+                                    "confidence": "High",
+                                    "rationale": "Fresh verified report needs prompt review.",
+                                }
+                            ]
+                        )
+                    )
+                ]
+            )
+        )
+
+        with (
+            patch("app.agents.waste_analysis_agent.invoke_chat_model", wraps=invoke_chat_model) as mock_invoke,
+            patch("app.core.llm.get_settings", return_value=Settings(LLM_PROVIDER="google")),
+            patch("app.core.llm._wait_for_gemini_rate_limit") as mock_wait,
+        ):
+            result = run_waste_analysis(
+                WasteAnalysisRequest(objective="Analyse verified waste reports for collection planning."),
+                model=model,
+            )
+
+        assert result.status == "completed"
+        assert mock_invoke.call_count == 1
+        assert mock_invoke.call_args.args[0] is model
+        assert isinstance(mock_invoke.call_args.args[1], list)
+        mock_wait.assert_not_called()
 
     # ──────────────────────────────────────────────────────────────────────────
     # 4. REPORT COVERAGE & SAFETY ASSERTIONS
@@ -573,6 +624,7 @@ class TestWasteAnalysisAgent:
                 google_api_key=fake_key,
                 temperature=0.0,
                 timeout=25.0,
+                max_retries=0,
             )
 
     def test_google_provider_missing_api_key_raises_error(self):

@@ -1,4 +1,5 @@
 using SmartWaste.Domain.Workflow.Enums;
+using SmartWaste.Application.Reporting;
 
 namespace SmartWaste.Application.Workflow.DTOs.Responses;
 
@@ -8,6 +9,9 @@ namespace SmartWaste.Application.Workflow.DTOs.Responses;
 public class AgentWorkflowSummaryDto
 {
     public Guid Id { get; set; }
+    public AgentWorkflowTriggerType TriggerType { get; set; } = AgentWorkflowTriggerType.ManualOperationalPlanning;
+    public Guid? TriggeringWasteReportId { get; set; }
+    public string? ReportReference => TriggeringWasteReportId is Guid id ? WasteReportReference.FromId(id) : null;
     public string Objective { get; set; } = string.Empty;
     public AgentWorkflowStatus Status { get; set; }
     public WorkflowStepType CurrentStep { get; set; }

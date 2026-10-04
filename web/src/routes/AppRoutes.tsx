@@ -30,6 +30,8 @@ import { CollectionNeedsPage } from '../features/collection/pages/CollectionNeed
 import { CollectionTaskEnhancedDetailPage, CollectionTasksPage } from '../features/collection/pages/CollectionTasksPages';
 import { ManagerFleetRoutesPage } from '../features/fleet/pages/ManagerFleetRoutesPage';
 import { DispatchRoutesPage } from '../features/fleet/pages/DispatchRoutesPage';
+import { AiApprovalsPage } from '../features/ai-approvals/pages/AiApprovalsPage';
+import { AiWorkflowDetailPage } from '../features/ai-approvals/pages/AiWorkflowDetailPage';
 
 /**
  * Renders auth pages or redirects already-authenticated users to their role default dashboard.
@@ -123,6 +125,8 @@ export const AppRoutes: React.FC = () => {
             <Route path="/officer/schedules" element={<CollectionNeedsPage />} />
             <Route path="/officer/tasks" element={<CollectionTasksPage />} />
             <Route path="/officer/tasks/:id" element={<CollectionTaskEnhancedDetailPage />} />
+            <Route path="/officer/ai-approvals" element={<AiApprovalsPage />} />
+            <Route path="/officer/ai-approvals/:workflowId" element={<AiWorkflowDetailPage />} />
             <Route path="/officer/dispatch" element={<DispatchRoutesPage />} />
             <Route
               path="/officer/complaints"
@@ -150,16 +154,8 @@ export const AppRoutes: React.FC = () => {
             <Route path="/manager/users" element={<UserManagementPage />} />
             <Route path="/manager/tasks" element={<CollectionTasksPage />} />
             <Route path="/manager/tasks/:id" element={<CollectionTaskEnhancedDetailPage />} />
-            <Route
-              path="/manager/ai-approvals"
-              element={
-                <ComingSoonPage
-                  title="AI Approvals"
-                  description="Review and adjudicate multi-agent AI workflow proposals and recommendations. This module is currently under development."
-                  backTo="/manager/dashboard"
-                />
-              }
-            />
+            <Route path="/manager/ai-approvals" element={<AiApprovalsPage />} />
+            <Route path="/manager/ai-approvals/:workflowId" element={<AiWorkflowDetailPage />} />
             <Route
               path="/manager/fleet"
               element={<ManagerFleetRoutesPage />}

@@ -1097,12 +1097,33 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<int>("ProcessingAttemptCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("ProcessingLeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ProcessingLeaseId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
                         .HasDefaultValue("Created");
+
+                    b.Property<string>("TriggerType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("ManualOperationalPlanning");
+
+                    b.Property<Guid?>("TriggeringWasteReportId")
+                        .HasColumnType("uuid");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1124,11 +1145,23 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status")
                         .HasDatabaseName("IX_AgentWorkflows_Status");
 
+                    b.HasIndex("TriggerType")
+                        .HasDatabaseName("IX_AgentWorkflows_TriggerType");
+
+                    b.HasIndex("TriggeringWasteReportId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_AgentWorkflows_TriggeringWasteReportId")
+                        .HasFilter("\"TriggeringWasteReportId\" IS NOT NULL");
+
                     b.ToTable("AgentWorkflows", null, t =>
                         {
                             t.HasCheckConstraint("CK_AgentWorkflows_Objective", "LENGTH(TRIM(\"Objective\")) >= 5");
 
-                            t.HasCheckConstraint("CK_AgentWorkflows_Status", "\"Status\" IN ('Created', 'Planning', 'AwaitingCollectionApproval', 'CollectionNeedsRevision', 'CollectionApproved', 'CreatingScheduledTasks', 'FleetPlanning', 'OperationalValidation', 'AwaitingDispatchApproval', 'DispatchNeedsRevision', 'DispatchApproved', 'ExecutingAssignments', 'Completed', 'Rejected', 'Failed')");
+                            t.HasCheckConstraint("CK_AgentWorkflows_ProcessingAttemptCount", "\"ProcessingAttemptCount\" >= 0");
+
+                            t.HasCheckConstraint("CK_AgentWorkflows_Status", "\"Status\" IN ('Created', 'Planning', 'AwaitingCollectionApproval', 'CollectionNeedsRevision', 'CollectionApproved', 'CreatingScheduledTasks', 'FleetPlanning', 'OperationalValidation', 'AwaitingDispatchApproval', 'DispatchNeedsRevision', 'DispatchApproved', 'ExecutingAssignments', 'Completed', 'Rejected', 'Failed', 'AwaitingReportVerification')");
+
+                            t.HasCheckConstraint("CK_AgentWorkflows_TriggerReport", "(\"TriggerType\" = 'ManualOperationalPlanning' AND \"TriggeringWasteReportId\" IS NULL) OR (\"TriggerType\" = 'CitizenReportSubmission' AND \"TriggeringWasteReportId\" IS NOT NULL)");
                         });
                 });
 
@@ -1682,7 +1715,14 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("SmartWaste.Domain.Reporting.Entities.WasteReport", "TriggeringWasteReport")
+                        .WithMany()
+                        .HasForeignKey("TriggeringWasteReportId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("InitiatedByUser");
+
+                    b.Navigation("TriggeringWasteReport");
                 });
 
             modelBuilder.Entity("SmartWaste.Domain.Workflow.Entities.AgentWorkflowApproval", b =>

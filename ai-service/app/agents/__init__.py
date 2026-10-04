@@ -17,6 +17,12 @@ from app.agents.collection_planning_agent import (
     CollectionPlanningValidationError,
     run_collection_planning,
 )
+from app.agents.shared_planner_agent import (
+    SharedPlannerAgentError,
+    SharedPlannerModelError,
+    SharedPlannerValidationError,
+    run_shared_planner,
+)
 
 __all__ = [
     "AGENT_NAME",
@@ -34,4 +40,8 @@ __all__ = [
     "CollectionPlanningToolError",
     "CollectionPlanningValidationError",
     "run_collection_planning",
+    "SharedPlannerAgentError",
+    "SharedPlannerModelError",
+    "SharedPlannerValidationError",
+    "run_shared_planner",
 ]

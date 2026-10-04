@@ -354,6 +354,7 @@ Lists waste reports with pagination, search, domain filtering, and sorting.
   "items": [
     {
       "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "reportReference": "3FA85F64",
       "description": "Large garbage heap overflowing near bus stand",
       "wasteType": "General",
       "status": "Submitted",
@@ -389,6 +390,7 @@ Retrieves full details of a specific report including photographic attachments a
 ```json
 {
   "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "reportReference": "3FA85F64",
   "citizenId": "1fa85f64-5717-4562-b3fc-2c963f66afa1",
   "citizenName": "Kamal Perera",
   "description": "Large garbage heap overflowing near bus stand",
@@ -920,8 +922,9 @@ Retrieves the unified derived read queue of outstanding collection needs across 
     {
       "id": "5ac553cf-967f-4115-91f5-7f947b55802c",
       "targetType": "Report",
+      "reportReference": "5AC553CF",
       "collectionReason": "VerifiedReport",
-      "title": "Verified Report: Main Street, Pettah",
+      "title": "Report 5AC553CF: Main Street, Pettah",
       "latitude": 6.9351,
       "longitude": 79.8512,
       "addressText": "Main Street, Pettah",
@@ -934,6 +937,7 @@ Retrieves the unified derived read queue of outstanding collection needs across 
     {
       "id": "c1f728c4-e4c1-424a-8d38-9cfb2e652a91",
       "targetType": "Bin",
+      "reportReference": null,
       "collectionReason": "FullOrBlockedBin",
       "title": "BIN-COL-0042 (100% Full)",
       "latitude": 6.9271,
@@ -1535,7 +1539,7 @@ Retrieves a strictly read-only, paginated, safe projection of WasteReports whose
   - Internal WasteOfficer identifiers are excluded.
   - Private Supabase Storage keys and signed image URLs are excluded.
   - Internal status transition notes and history records are excluded.
-  - Exposes only operational metadata required for planning: `id`, `description`, `wasteType`, `latitude`, `longitude`, `addressText`, `status`, `createdAt`, `verifiedAt`, and `attachmentCount`.
+  - Exposes only operational metadata required for planning: `id`, derived display-only `reportReference`, `description`, `wasteType`, `latitude`, `longitude`, `addressText`, `status`, `createdAt`, `verifiedAt`, and `attachmentCount`.
 - **Query Parameters:**
   - `page` (integer, default: `1`, minimum: `1`)
   - `pageSize` (integer, default: `20`, range: `1` to `50`)
@@ -1548,6 +1552,7 @@ Retrieves a strictly read-only, paginated, safe projection of WasteReports whose
   "items": [
     {
       "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "reportReference": "3FA85F64",
       "description": "Accumulation of organic waste near market entrance",
       "wasteType": "Organic",
       "latitude": 6.9271,
@@ -1571,6 +1576,19 @@ Retrieves a strictly read-only, paginated, safe projection of WasteReports whose
 
 ---
 
+### 8.1a `GET /api/v1/internal/ai-tools/waste-reports/for-verification/{reportId}` `[Implemented]`
+Reads exactly one authoritative WasteReport for future report-triggered C1 advisory analysis. The existing verified-report list endpoint and manual workflow behavior are unchanged.
+
+- **Access:** Internal Service only, using the same `X-Internal-Service-Key` policy as the verified-report tool. User JWTs alone cannot authorize this endpoint.
+- **Input:** Full WasteReport UUID in `reportId`; display references and citizen text are never used for lookup.
+- **Eligibility:** The service permits only `Submitted` or `UnderReview`. This accommodates an officer starting review while advisory analysis runs. Other report statuses are rejected.
+- **Response `200 OK`:** One allow-listed object with `id`, dynamically derived `reportReference`, `description`, `wasteType`, `latitude`, `longitude`, `addressText`, `status`, `createdAt`, and `attachmentCount`. The description is untrusted citizen data. The endpoint supplies no image contents and makes no visual claims.
+- **Exclusions:** Citizen and officer identifiers or contact details, verification metadata, priority, attachment storage keys or URLs, internal credentials, and report history.
+- **Errors:** `401` for missing or invalid internal credentials; `404` for an unknown UUID; `409` when an existing report has an ineligible status. Errors use `ProblemDetails`.
+- **Side effects:** None. The endpoint cannot verify, reject, reprioritize, or otherwise modify a report.
+
+---
+
 ### 8.2 `GET /api/v1/internal/ai-tools/collection-needs` `[Proposed for C2 AI Step]`
 Retrieves a strictly read-only, paginated, safe projection of the municipality's outstanding collection needs (derived from Sources A, B, and C with active task suppression).
 
@@ -1581,7 +1599,7 @@ Retrieves a strictly read-only, paginated, safe projection of the municipality's
   - Citizen personal identifiable information (`fullName`, `email`, `phoneNumber`) is completely omitted.
   - Internal staff user IDs and transition notes are omitted.
   - Supabase image storage keys are omitted.
-  - Exposes only geographic coordinates, target identification (`targetType`, `wasteReportId` or `wasteBinId`, `binCode`), accepted `wasteTypes`, `collectionReason`, calculated `urgency`, `triggerDate`, and essential bin capacity/observation telemetry.
+  - Exposes only geographic coordinates, target identification (`targetType`, `wasteReportId` or `wasteBinId`, display-only `reportReference` or authoritative `binCode`), accepted `wasteTypes`, `collectionReason`, calculated `urgency`, `triggerDate`, and essential bin capacity/observation telemetry. Full UUIDs remain authoritative.
 - **Query Parameters:**
   - `targetType` (string, optional): `"Report"` or `"Bin"`.
   - `collectionReason` (string, optional): `"VerifiedReport"`, `"FullOrBlockedBin"`, `"RoutineCollection"`.
@@ -1600,6 +1618,8 @@ Retrieves a strictly read-only, paginated, safe projection of the municipality's
       "targetType": "Report",
       "wasteReportId": "5ac553cf-967f-4115-91f5-7f947b55802c",
       "wasteBinId": null,
+      "reportReference": "5AC553CF",
+      "binCode": null,
       "collectionReason": "VerifiedReport",
       "latitude": 6.9351,
       "longitude": 79.8512,
@@ -1614,6 +1634,8 @@ Retrieves a strictly read-only, paginated, safe projection of the municipality's
       "targetType": "Bin",
       "wasteReportId": null,
       "wasteBinId": "c1f728c4-e4c1-424a-8d38-9cfb2e652a91",
+      "reportReference": null,
+      "binCode": "BIN-COL-0042",
       "collectionReason": "FullOrBlockedBin",
       "latitude": 6.9271,
       "longitude": 79.8612,

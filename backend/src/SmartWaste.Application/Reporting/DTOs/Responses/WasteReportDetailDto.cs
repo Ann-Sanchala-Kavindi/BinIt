@@ -8,6 +8,7 @@ namespace SmartWaste.Application.Reporting.DTOs.Responses;
 public class WasteReportDetailDto
 {
     public Guid Id { get; set; }
+    public string ReportReference => SmartWaste.Application.Reporting.WasteReportReference.FromId(Id);
     public Guid CitizenId { get; set; }
     public string CitizenName { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;

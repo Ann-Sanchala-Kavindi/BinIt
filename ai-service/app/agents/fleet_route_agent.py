@@ -7,7 +7,7 @@ import httpx
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from app.core.llm import get_chat_model
+from app.core.llm import get_chat_model, invoke_chat_model
 from app.models.fleet_resources import (
     FleetCompatibilityStatus,
     FleetPlanningContextResponse,
@@ -380,7 +380,7 @@ def run_fleet_route(
 
     for attempt in range(1, MAX_MODEL_ATTEMPTS + 1):
         try:
-            raw_response = chat_model.invoke(messages)
+            raw_response = invoke_chat_model(chat_model, messages)
             extracted_json = _extract_json_text(raw_response)
             payload = _StructuredFleetRoutePayload.model_validate(json.loads(extracted_json))
 

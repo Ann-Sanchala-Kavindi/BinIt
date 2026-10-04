@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -193,6 +194,7 @@ public class CollectionNeedServiceTests
         item.Id.Should().Be(report.Id);
         item.TargetType.Should().Be("Report");
         item.CollectionReason.Should().Be("VerifiedReport");
+        item.Title.Should().StartWith($"Report {report.Id.ToString("N")[..8].ToUpperInvariant()}: ");
         item.Title.Should().Contain("Pettah Market");
         item.WasteTypes.Should().Contain("General");
         item.Urgency.Should().Be("High");
@@ -830,6 +832,13 @@ public class CollectionNeedServiceTests
         result.TotalCount.Should().Be(2);
         var reportNeed = result.Items.Should().ContainSingle(item => item.WasteReportId == report.Id).Subject;
         reportNeed.TargetType.Should().Be("Report");
+        reportNeed.Id.Should().Be(report.Id);
+        reportNeed.ReportReference.Should().Be(report.Id.ToString("N")[..8].ToUpperInvariant());
+        using (var json = JsonDocument.Parse(JsonSerializer.Serialize(reportNeed, new JsonSerializerOptions(JsonSerializerDefaults.Web))))
+        {
+            json.RootElement.GetProperty("wasteReportId").GetGuid().Should().Be(report.Id);
+            json.RootElement.GetProperty("reportReference").GetString().Should().Be(reportNeed.ReportReference);
+        }
         reportNeed.CollectionReason.Should().Be("VerifiedReport");
         reportNeed.Urgency.Should().Be("Urgent");
         reportNeed.WasteTypes.Should().ContainSingle().Which.Should().Be("Hazardous");
@@ -837,6 +846,13 @@ public class CollectionNeedServiceTests
 
         var binNeed = result.Items.Should().ContainSingle(item => item.WasteBinId == bin.Id).Subject;
         binNeed.TargetType.Should().Be("Bin");
+        binNeed.Id.Should().Be(bin.Id);
+        binNeed.BinCode.Should().Be("BIN-AI-100");
+        using (var json = JsonDocument.Parse(JsonSerializer.Serialize(binNeed, new JsonSerializerOptions(JsonSerializerDefaults.Web))))
+        {
+            json.RootElement.GetProperty("wasteBinId").GetGuid().Should().Be(bin.Id);
+            json.RootElement.GetProperty("binCode").GetString().Should().Be(bin.BinCode);
+        }
         binNeed.CollectionReason.Should().Be("FullOrBlockedBin");
         binNeed.BinTelemetry.Should().NotBeNull();
         binNeed.BinTelemetry!.BinCode.Should().Be("BIN-AI-100");

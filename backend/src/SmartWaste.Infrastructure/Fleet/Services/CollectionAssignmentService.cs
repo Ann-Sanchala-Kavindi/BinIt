@@ -7,7 +7,146 @@ public sealed class CollectionAssignmentService(AppDbContext db, UserManager<App
  private readonly CancelCollectionAssignmentRequestValidator _cancelValidator=new();
  private readonly FailRouteStopRequestValidator _failStopValidator=new();
  private readonly RecordBinObservationRequestValidator _observationValidator=new();
- public async Task<AssignmentDetailDto> CreateAsync(CreateCollectionAssignmentRequest r,Guid actor,string role,CancellationToken ct=default){if(role!=AppRoles.WasteOfficer)throw new ForbiddenException("Only Waste Officers can create collection assignments.");var valid=await _validator.ValidateAsync(r,ct);if(!valid.IsValid)throw new ValidationException(valid.Errors);if(!r.CollectionTaskIds.OrderBy(x=>x).SequenceEqual(r.Stops.Select(x=>x.CollectionTaskId).OrderBy(x=>x)))throw new ValidationException("Stops must reference every selected task exactly once.");await using var tx=await db.Database.BeginTransactionAsync(ct);try{var driver=await db.DriverProfiles.Include(x=>x.User).SingleOrDefaultAsync(x=>x.UserId==r.DriverId,ct)??throw new NotFoundException("Driver availability profile was not found.");if(driver.User is null||!driver.User.IsActive||driver.AvailabilityStatus!=DriverAvailabilityStatus.Available||!await users.IsInRoleAsync(driver.User,AppRoles.Driver))throw new BusinessRuleConflictException("Driver is not available for a new assignment.");var vehicle=await db.Vehicles.Include(x=>x.SupportedWasteTypes).SingleOrDefaultAsync(x=>x.Id==r.VehicleId,ct)??throw new NotFoundException("Vehicle was not found.");if(vehicle.OperationalStatus!=VehicleOperationalStatus.Available)throw new BusinessRuleConflictException("Vehicle is not available.");if(await db.CollectionAssignments.AnyAsync(x=>(x.Status==CollectionAssignmentStatus.Assigned||x.Status==CollectionAssignmentStatus.InProgress)&&(x.DriverId==r.DriverId||x.VehicleId==r.VehicleId),ct))throw new BusinessRuleConflictException("Driver or vehicle already has an unfinished assignment.");var tasks=await db.CollectionTasks.Include(x=>x.WasteReport).Include(x=>x.WasteBin).ThenInclude(x=>x!.AcceptedWasteTypes).Where(x=>r.CollectionTaskIds.Contains(x.Id)).ToListAsync(ct);if(tasks.Count!=r.CollectionTaskIds.Count)throw new NotFoundException("One or more collection tasks were not found.");if(tasks.Any(x=>x.Status!=CollectionTaskStatus.Scheduled))throw new BusinessRuleConflictException("All selected tasks must be Scheduled.");if(tasks.Any(x=>!x.WasteReportId.HasValue&&!x.WasteBinId.HasValue))throw new BusinessRuleConflictException("A selected task has no valid target.");if(await db.CollectionAssignmentTaskClaims.AnyAsync(x=>x.IsActive&&r.CollectionTaskIds.Contains(x.CollectionTaskId),ct))throw new BusinessRuleConflictException("A selected task is already assigned.");var requiresAck=RequiresAcknowledgement(tasks,vehicle);if(IsIncompatible(tasks,vehicle))throw new BusinessRuleConflictException("The selected vehicle is incompatible with the selected waste handling requirements.");if(requiresAck&&(string.IsNullOrWhiteSpace(r.CompatibilityAcknowledgement)||r.CompatibilityAcknowledgement.Trim().Length<5))throw new BusinessRuleConflictException("Waste-handling uncertainty requires an officer acknowledgement.");var now=DateTime.UtcNow;var a=new CollectionAssignment{DriverId=driver.UserId,VehicleId=vehicle.Id,AssignedByUserId=actor,Status=CollectionAssignmentStatus.Assigned,AssignedAt=now,CreatedAt=now,CompatibilityAcknowledgement=requiresAck?r.CompatibilityAcknowledgement!.Trim():null,CompatibilityAcknowledgedByUserId=requiresAck?actor:null,CompatibilityAcknowledgedAt=requiresAck?now:null};var route=new Route{CollectionAssignmentId=a.Id,RoutingMethod=RoutingMethod.ManualOrder,CreatedAt=now};a.Route=route;db.CollectionAssignments.Add(a);db.CollectionAssignmentStatusHistories.Add(new CollectionAssignmentStatusHistory{CollectionAssignmentId=a.Id,ToStatus=CollectionAssignmentStatus.Assigned,ChangedByUserId=actor,ChangedAt=now});foreach(var stopRequest in r.Stops.OrderBy(x=>x.Sequence)){var task=tasks.Single(x=>x.Id==stopRequest.CollectionTaskId);var claim=new CollectionAssignmentTaskClaim{CollectionAssignmentId=a.Id,CollectionTaskId=task.Id,IsActive=true,ClaimedAt=now};db.CollectionAssignmentTaskClaims.Add(claim);var stop=new RouteStop{RouteId=route.Id,CollectionTaskId=task.Id,CollectionAssignmentTaskClaimId=claim.Id,Sequence=stopRequest.Sequence,Status=RouteStopStatus.Pending,CreatedAt=now};route.Stops.Add(stop);db.RouteStopStatusHistories.Add(new RouteStopStatusHistory{RouteStopId=stop.Id,ToStatus=RouteStopStatus.Pending,ChangedByUserId=actor,ChangedAt=now});task.Status=CollectionTaskStatus.Assigned;task.UpdatedAt=now;db.CollectionTaskStatusHistories.Add(new CollectionTaskStatusHistory{CollectionTaskId=task.Id,FromStatus=CollectionTaskStatus.Scheduled,ToStatus=CollectionTaskStatus.Assigned,ChangedByUserId=actor,ChangedAt=now,Notes="Assigned to a manual collection assignment."});}await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return await new AssignmentReadService(db).GetDetailAsync(a.Id,actor,role,ct);}catch(DbUpdateException ex) when(ex.InnerException is PostgresException {SqlState:PostgresErrorCodes.UniqueViolation}){await tx.RollbackAsync(ct);throw new BusinessRuleConflictException("A selected resource or task was claimed by another assignment.");}catch{await tx.RollbackAsync(ct);throw;}}
+    public async Task<AssignmentDetailDto> CreateAsync(CreateCollectionAssignmentRequest r, Guid actor, string role, CancellationToken ct = default)
+    {
+        if (role != AppRoles.WasteOfficer)
+            throw new ForbiddenException("Only Waste Officers can create collection assignments.");
+        return await ExecuteCreateAssignmentAsync(r, actor, role, ct);
+    }
+
+    public async Task<AssignmentDetailDto> CreateAssignmentFromApprovedPlanAsync(CreateCollectionAssignmentRequest r, Guid managerUserId, CancellationToken ct = default)
+    {
+        return await ExecuteCreateAssignmentAsync(r, managerUserId, AppRoles.MunicipalManager, ct);
+    }
+
+    private async Task<AssignmentDetailDto> ExecuteCreateAssignmentAsync(CreateCollectionAssignmentRequest r, Guid actor, string role, CancellationToken ct)
+    {
+        var valid = await _validator.ValidateAsync(r, ct);
+        if (!valid.IsValid) throw new ValidationException(valid.Errors);
+        if (!r.CollectionTaskIds.OrderBy(x => x).SequenceEqual(r.Stops.Select(x => x.CollectionTaskId).OrderBy(x => x)))
+            throw new ValidationException("Stops must reference every selected task exactly once.");
+
+        var isInMemory = db.Database.ProviderName?.Contains("InMemory") == true;
+        await using var tx = (isInMemory || db.Database.CurrentTransaction != null)
+            ? null
+            : await db.Database.BeginTransactionAsync(ct);
+
+        try
+        {
+            var driver = await db.DriverProfiles.Include(x => x.User).SingleOrDefaultAsync(x => x.UserId == r.DriverId, ct)
+                ?? throw new NotFoundException("Driver availability profile was not found.");
+            if (driver.User is null || !driver.User.IsActive || driver.AvailabilityStatus != DriverAvailabilityStatus.Available || !await users.IsInRoleAsync(driver.User, AppRoles.Driver))
+                throw new BusinessRuleConflictException("Driver is not available for a new assignment.");
+
+            var vehicle = await db.Vehicles.Include(x => x.SupportedWasteTypes).SingleOrDefaultAsync(x => x.Id == r.VehicleId, ct)
+                ?? throw new NotFoundException("Vehicle was not found.");
+            if (vehicle.OperationalStatus != VehicleOperationalStatus.Available)
+                throw new BusinessRuleConflictException("Vehicle is not available.");
+
+            if (await db.CollectionAssignments.AnyAsync(x => (x.Status == CollectionAssignmentStatus.Assigned || x.Status == CollectionAssignmentStatus.InProgress) && (x.DriverId == r.DriverId || x.VehicleId == r.VehicleId), ct))
+                throw new BusinessRuleConflictException("Driver or vehicle already has an unfinished assignment.");
+
+            var tasks = await db.CollectionTasks.Include(x => x.WasteReport).Include(x => x.WasteBin).ThenInclude(x => x!.AcceptedWasteTypes).Where(x => r.CollectionTaskIds.Contains(x.Id)).ToListAsync(ct);
+            if (tasks.Count != r.CollectionTaskIds.Count) throw new NotFoundException("One or more collection tasks were not found.");
+            if (tasks.Any(x => x.Status != CollectionTaskStatus.Scheduled)) throw new BusinessRuleConflictException("All selected tasks must be Scheduled.");
+            if (tasks.Any(x => !x.WasteReportId.HasValue && !x.WasteBinId.HasValue)) throw new BusinessRuleConflictException("A selected task has no valid target.");
+            if (await db.CollectionAssignmentTaskClaims.AnyAsync(x => x.IsActive && r.CollectionTaskIds.Contains(x.CollectionTaskId), ct))
+                throw new BusinessRuleConflictException("A selected task is already assigned.");
+
+            var requiresAck = RequiresAcknowledgement(tasks, vehicle);
+            if (IsIncompatible(tasks, vehicle))
+                throw new BusinessRuleConflictException("The selected vehicle is incompatible with the selected waste handling requirements.");
+            if (requiresAck && (string.IsNullOrWhiteSpace(r.CompatibilityAcknowledgement) || r.CompatibilityAcknowledgement.Trim().Length < 5))
+                throw new BusinessRuleConflictException("Waste-handling uncertainty requires an officer acknowledgement.");
+
+            var now = DateTime.UtcNow;
+            var a = new CollectionAssignment
+            {
+                DriverId = driver.UserId,
+                VehicleId = vehicle.Id,
+                AssignedByUserId = actor,
+                Status = CollectionAssignmentStatus.Assigned,
+                AssignedAt = now,
+                CreatedAt = now,
+                CompatibilityAcknowledgement = requiresAck ? r.CompatibilityAcknowledgement!.Trim() : null,
+                CompatibilityAcknowledgedByUserId = requiresAck ? actor : null,
+                CompatibilityAcknowledgedAt = requiresAck ? now : null
+            };
+            var route = new Route
+            {
+                CollectionAssignmentId = a.Id,
+                RoutingMethod = RoutingMethod.ManualOrder,
+                CreatedAt = now
+            };
+            a.Route = route;
+            db.CollectionAssignments.Add(a);
+            db.CollectionAssignmentStatusHistories.Add(new CollectionAssignmentStatusHistory
+            {
+                CollectionAssignmentId = a.Id,
+                ToStatus = CollectionAssignmentStatus.Assigned,
+                ChangedByUserId = actor,
+                ChangedAt = now
+            });
+
+            foreach (var stopRequest in r.Stops.OrderBy(x => x.Sequence))
+            {
+                var task = tasks.Single(x => x.Id == stopRequest.CollectionTaskId);
+                var claim = new CollectionAssignmentTaskClaim
+                {
+                    CollectionAssignmentId = a.Id,
+                    CollectionTaskId = task.Id,
+                    IsActive = true,
+                    ClaimedAt = now
+                };
+                db.CollectionAssignmentTaskClaims.Add(claim);
+                var stop = new RouteStop
+                {
+                    RouteId = route.Id,
+                    CollectionTaskId = task.Id,
+                    CollectionAssignmentTaskClaimId = claim.Id,
+                    Sequence = stopRequest.Sequence,
+                    Status = RouteStopStatus.Pending,
+                    CreatedAt = now
+                };
+                route.Stops.Add(stop);
+                db.RouteStopStatusHistories.Add(new RouteStopStatusHistory
+                {
+                    RouteStopId = stop.Id,
+                    ToStatus = RouteStopStatus.Pending,
+                    ChangedByUserId = actor,
+                    ChangedAt = now
+                });
+                task.Status = CollectionTaskStatus.Assigned;
+                task.UpdatedAt = now;
+                db.CollectionTaskStatusHistories.Add(new CollectionTaskStatusHistory
+                {
+                    CollectionTaskId = task.Id,
+                    FromStatus = CollectionTaskStatus.Scheduled,
+                    ToStatus = CollectionTaskStatus.Assigned,
+                    ChangedByUserId = actor,
+                    ChangedAt = now,
+                    Notes = role == AppRoles.MunicipalManager
+                        ? "Assigned from approved AI dispatch plan."
+                        : "Assigned to a manual collection assignment."
+                });
+            }
+
+            await db.SaveChangesAsync(ct);
+            if (tx != null) await tx.CommitAsync(ct);
+            return await new AssignmentReadService(db).GetDetailAsync(a.Id, actor, role, ct);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
+        {
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw new BusinessRuleConflictException("A selected resource or task was claimed by another assignment.");
+        }
+        catch
+        {
+            if (tx != null) await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
  private static bool IsIncompatible(IEnumerable<CollectionTask> tasks,Vehicle vehicle)=>FleetWasteCompatibilityEvaluator.Evaluate(tasks,vehicle).Status==FleetCompatibilityStatus.Incompatible;
  private static bool RequiresAcknowledgement(IEnumerable<CollectionTask> tasks,Vehicle vehicle)=>FleetWasteCompatibilityEvaluator.Evaluate(tasks,vehicle).RequiresAcknowledgement;
  public async Task<RouteReadDto> ReorderStopsAsync(Guid assignmentId,ReorderRouteStopsRequest request,Guid actor,string role,CancellationToken ct=default){if(role!=AppRoles.WasteOfficer)throw new ForbiddenException("Only Waste Officers can reorder manual routes.");var valid=await _reorderValidator.ValidateAsync(request,ct);if(!valid.IsValid)throw new ValidationException(valid.Errors);await using var tx=await db.Database.BeginTransactionAsync(IsolationLevel.Serializable,ct);try{var assignment=await db.CollectionAssignments.Include(x=>x.Route!).ThenInclude(x=>x.Stops).SingleOrDefaultAsync(x=>x.Id==assignmentId,ct)??throw new NotFoundException("Collection assignment was not found.");if(assignment.Status!=CollectionAssignmentStatus.Assigned)throw new BusinessRuleConflictException("Only unstarted assignments can be reordered.");var route=assignment.Route??throw new BusinessRuleConflictException("Assignment has no route.");if(route.RoutingMethod!=RoutingMethod.ManualOrder)throw new BusinessRuleConflictException("Only manual routes can be reordered.");if(route.Stops.Any(x=>x.Status!=RouteStopStatus.Pending||x.CompletedAt.HasValue||x.FailedAt.HasValue))throw new BusinessRuleConflictException("Executed route stops cannot be reordered.");if(route.Stops.Count!=request.Stops.Count||!route.Stops.Select(x=>x.Id).OrderBy(x=>x).SequenceEqual(request.Stops.Select(x=>x.RouteStopId).OrderBy(x=>x)))throw new ValidationException("The request must contain every stop on this route exactly once.");var desired=request.Stops.ToDictionary(x=>x.RouteStopId,x=>x.Sequence);if(route.Stops.All(x=>x.Sequence==desired[x.Id]))return await new AssignmentReadService(db).GetRouteAsync(route.Id,actor,role,ct);var maxSequence=route.Stops.Max(x=>x.Sequence);if(maxSequence>int.MaxValue-route.Stops.Count-1)throw new BusinessRuleConflictException("Route stop sequences cannot be safely reordered.");var temporaryBase=maxSequence+route.Stops.Count+1;foreach(var stop in route.Stops)stop.Sequence=temporaryBase+stop.Sequence;await db.SaveChangesAsync(ct);foreach(var stop in route.Stops)stop.Sequence=desired[stop.Id];route.UpdatedAt=DateTime.UtcNow;await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);return await new AssignmentReadService(db).GetRouteAsync(route.Id,actor,role,ct);}catch{await tx.RollbackAsync(ct);throw;}}

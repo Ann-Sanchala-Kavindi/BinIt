@@ -16,11 +16,20 @@ public class AgentWorkflowConfiguration : IEntityTypeConfiguration<AgentWorkflow
                 "\"Status\" IN ('Created', 'Planning', 'AwaitingCollectionApproval', 'CollectionNeedsRevision', " +
                 "'CollectionApproved', 'CreatingScheduledTasks', 'FleetPlanning', 'OperationalValidation', " +
                 "'AwaitingDispatchApproval', 'DispatchNeedsRevision', 'DispatchApproved', 'ExecutingAssignments', " +
-                "'Completed', 'Rejected', 'Failed')");
+                "'Completed', 'Rejected', 'Failed', 'AwaitingReportVerification')");
 
             t.HasCheckConstraint(
                 "CK_AgentWorkflows_Objective",
                 "LENGTH(TRIM(\"Objective\")) >= 5");
+
+            t.HasCheckConstraint(
+                "CK_AgentWorkflows_TriggerReport",
+                "(\"TriggerType\" = 'ManualOperationalPlanning' AND \"TriggeringWasteReportId\" IS NULL) OR " +
+                "(\"TriggerType\" = 'CitizenReportSubmission' AND \"TriggeringWasteReportId\" IS NOT NULL)");
+
+            t.HasCheckConstraint(
+                "CK_AgentWorkflows_ProcessingAttemptCount",
+                "\"ProcessingAttemptCount\" >= 0");
         });
 
         builder.HasKey(w => w.Id);
@@ -34,6 +43,19 @@ public class AgentWorkflowConfiguration : IEntityTypeConfiguration<AgentWorkflow
             .HasConversion<string>()
             .HasMaxLength(50)
             .HasDefaultValue(AgentWorkflowStatus.Created);
+
+        builder.Property(w => w.TriggerType)
+            .IsRequired()
+            .HasConversion<string>()
+            .HasMaxLength(50)
+            .HasDefaultValue(AgentWorkflowTriggerType.ManualOperationalPlanning);
+
+        builder.Property(w => w.ProcessingLeaseExpiresAt)
+            .HasColumnType("timestamp with time zone");
+
+        builder.Property(w => w.ProcessingAttemptCount)
+            .IsRequired()
+            .HasDefaultValue(0);
 
         builder.Property(w => w.CurrentStep)
             .IsRequired()
@@ -56,6 +78,11 @@ public class AgentWorkflowConfiguration : IEntityTypeConfiguration<AgentWorkflow
         builder.HasOne(w => w.InitiatedByUser)
             .WithMany()
             .HasForeignKey(w => w.InitiatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(w => w.TriggeringWasteReport)
+            .WithMany()
+            .HasForeignKey(w => w.TriggeringWasteReportId)
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasMany(w => w.Steps)
@@ -87,5 +114,13 @@ public class AgentWorkflowConfiguration : IEntityTypeConfiguration<AgentWorkflow
 
         builder.HasIndex(w => w.InitiatedByUserId)
             .HasDatabaseName("IX_AgentWorkflows_InitiatedByUserId");
+
+        builder.HasIndex(w => w.TriggerType)
+            .HasDatabaseName("IX_AgentWorkflows_TriggerType");
+
+        builder.HasIndex(w => w.TriggeringWasteReportId)
+            .IsUnique()
+            .HasFilter("\"TriggeringWasteReportId\" IS NOT NULL")
+            .HasDatabaseName("IX_AgentWorkflows_TriggeringWasteReportId");
     }
 }

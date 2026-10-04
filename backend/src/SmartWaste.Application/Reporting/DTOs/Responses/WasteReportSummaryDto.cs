@@ -8,6 +8,7 @@ namespace SmartWaste.Application.Reporting.DTOs.Responses;
 public class WasteReportSummaryDto
 {
     public Guid Id { get; set; }
+    public string ReportReference => SmartWaste.Application.Reporting.WasteReportReference.FromId(Id);
     public string Description { get; set; } = string.Empty;
     public WasteType WasteType { get; set; }
     public WasteReportStatus Status { get; set; }

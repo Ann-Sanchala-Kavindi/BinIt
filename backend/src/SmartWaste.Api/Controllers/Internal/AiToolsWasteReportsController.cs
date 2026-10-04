@@ -55,4 +55,21 @@ public class AiToolsWasteReportsController : ControllerBase
         var result = await _wasteReportService.GetVerifiedReportsForAiAsync(query, cancellationToken);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Reads exactly one Submitted or UnderReview report by authoritative UUID for advisory analysis.
+    /// The existing verified-report list remains the manual planning tool.
+    /// </summary>
+    [HttpGet("for-verification/{reportId:guid}")]
+    [ProducesResponseType(typeof(WasteReportForVerificationToolItemDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> GetReportForVerification(
+        [FromRoute] Guid reportId,
+        CancellationToken cancellationToken)
+    {
+        var report = await _wasteReportService.GetReportForVerificationAiAsync(reportId, cancellationToken);
+        return Ok(report);
+    }
 }

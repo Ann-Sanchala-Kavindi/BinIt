@@ -18,6 +18,7 @@ namespace SmartWaste.Tests.Reporting.Controllers;
 [Collection(IntegrationTestCollection.Name)]
 public class WasteReportsControllerTests
 {
+    private readonly CustomWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private static readonly JsonSerializerOptions SharedTestJsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -28,6 +29,7 @@ public class WasteReportsControllerTests
 
     public WasteReportsControllerTests(CustomWebApplicationFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -196,14 +198,15 @@ public class WasteReportsControllerTests
     }
 
     [Fact]
-    public async Task MunicipalManager_CannotVerifyReport_Returns403()
+    public async Task MunicipalManager_VerifyMissingReport_Returns404()
     {
         var managerToken = await GetManagerTokenAsync();
-        var req = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{Guid.NewGuid()}/verify", managerToken);
+        var req = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{Guid.NewGuid()}/verify", managerToken,
+            new VerifyWasteReportRequest { Priority = WasteReportPriority.High });
 
         var res = await _client.SendAsync(req);
 
-        res.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        res.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     [Fact]
@@ -389,13 +392,16 @@ public class WasteReportsControllerTests
         var reviewed = await reviewRes.Content.ReadFromJsonAsync<WasteReportDetailDto>(SharedTestJsonOptions);
         reviewed!.Status.Should().Be(WasteReportStatus.UnderReview);
 
+        await ReportWorkflowTestPreparation.MarkAwaitingVerificationAsync(_factory.Services, reportId);
+
         // 7. Waste Officer verifies report -> 200 OK
-        var verifyReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{reportId}/verify", officerToken);
+        var verifyReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{reportId}/verify", officerToken,
+            new VerifyWasteReportRequest { Priority = WasteReportPriority.High });
         var verifyRes = await _client.SendAsync(verifyReq);
         verifyRes.StatusCode.Should().Be(HttpStatusCode.OK);
         var verified = await verifyRes.Content.ReadFromJsonAsync<WasteReportDetailDto>(SharedTestJsonOptions);
         verified!.Status.Should().Be(WasteReportStatus.Verified);
-        verified.Priority.Should().BeNull("Priority must never be assigned in Component 1 verification");
+        verified.Priority.Should().Be(WasteReportPriority.High);
         verified.VerifiedByUserId.Should().NotBeNull();
         verified.VerifiedAt.Should().NotBeNull();
     }
@@ -414,6 +420,7 @@ public class WasteReportsControllerTests
         // 2. Start review
         var reviewReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report!.Id}/start-review", officerToken);
         await _client.SendAsync(reviewReq);
+        await ReportWorkflowTestPreparation.MarkAwaitingVerificationAsync(_factory.Services, report.Id);
 
         // 3. Reject with reason
         var rejectBody = new RejectWasteReportRequest { Reason = "Duplicate report already handled by zone team" };
@@ -509,10 +516,35 @@ public class WasteReportsControllerTests
         var report = await createRes.Content.ReadFromJsonAsync<WasteReportDetailDto>(SharedTestJsonOptions);
 
         // Attempt verify without start-review
-        var verifyReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report!.Id}/verify", officerToken);
+        var verifyReq = CreateAuthorizedRequest(HttpMethod.Post, $"/api/v1/waste-reports/{report!.Id}/verify", officerToken,
+            new VerifyWasteReportRequest { Priority = WasteReportPriority.High });
         var verifyRes = await _client.SendAsync(verifyReq);
 
         verifyRes.StatusCode.Should().Be(HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task Officer_CannotVerify_LinkedReportBeforeC1Pause_Returns409()
+    {
+        var citizenToken = await RegisterUniqueCitizenTokenAsync();
+        var officerToken = await GetOfficerTokenAsync();
+        var created = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Post,
+            "/api/v1/waste-reports", citizenToken, ValidCreateRequest()));
+        var report = await created.Content.ReadFromJsonAsync<WasteReportDetailDto>(SharedTestJsonOptions);
+        var reportId = report!.Id;
+        (await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Post,
+            $"/api/v1/waste-reports/{reportId}/start-review", officerToken)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var verify = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Post,
+            $"/api/v1/waste-reports/{reportId}/verify", officerToken,
+            new VerifyWasteReportRequest { Priority = WasteReportPriority.High }));
+
+        verify.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var detail = await _client.SendAsync(CreateAuthorizedRequest(HttpMethod.Get,
+            $"/api/v1/waste-reports/{reportId}", citizenToken));
+        (await detail.Content.ReadFromJsonAsync<WasteReportDetailDto>(SharedTestJsonOptions))!
+            .Status.Should().Be(WasteReportStatus.UnderReview);
     }
 
     // ──────────────────────────────────────────────────────────────────────────

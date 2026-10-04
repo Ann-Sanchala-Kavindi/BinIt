@@ -34,7 +34,7 @@ public class AgentWorkflowsController : ControllerBase
     /// Initiator identity is determined authoritatively from caller authentication claims.
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = $"{AppRoles.WasteOfficer},{AppRoles.MunicipalManager}")]
+    [Authorize(Roles = AppRoles.AgentWorkflowAuthorityRoles)]
     [ProducesResponseType(typeof(AgentWorkflowSummaryDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -53,6 +53,8 @@ public class AgentWorkflowsController : ControllerBase
         var response = new AgentWorkflowSummaryDto
         {
             Id = workflow.Id,
+            TriggerType = workflow.TriggerType,
+            TriggeringWasteReportId = workflow.TriggeringWasteReportId,
             Objective = workflow.Objective,
             Status = workflow.Status,
             CurrentStep = workflow.CurrentStep,
@@ -69,10 +71,10 @@ public class AgentWorkflowsController : ControllerBase
 
     /// <summary>
     /// Lists accessible workflows with bounded pagination and optional status filter.
-    /// Row-level visibility: WasteOfficer sees only own workflows; MunicipalManager sees all.
+    /// Equal visibility: MunicipalManager and WasteOfficer have equal operational visibility across all workflows.
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = $"{AppRoles.WasteOfficer},{AppRoles.MunicipalManager}")]
+    [Authorize(Roles = AppRoles.AgentWorkflowAuthorityRoles)]
     [ProducesResponseType(typeof(PagedResult<AgentWorkflowSummaryDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -95,7 +97,7 @@ public class AgentWorkflowsController : ControllerBase
     /// </summary>
     [HttpGet("{id:guid}")]
     [ActionName(nameof(GetById))]
-    [Authorize(Roles = $"{AppRoles.WasteOfficer},{AppRoles.MunicipalManager}")]
+    [Authorize(Roles = AppRoles.AgentWorkflowAuthorityRoles)]
     [ProducesResponseType(typeof(AgentWorkflowDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -117,7 +119,7 @@ public class AgentWorkflowsController : ControllerBase
     /// Retrieves the chronological audit transition history for a workflow.
     /// </summary>
     [HttpGet("{id:guid}/history")]
-    [Authorize(Roles = $"{AppRoles.WasteOfficer},{AppRoles.MunicipalManager}")]
+    [Authorize(Roles = AppRoles.AgentWorkflowAuthorityRoles)]
     [ProducesResponseType(typeof(IReadOnlyList<AgentWorkflowTransitionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
@@ -140,7 +142,7 @@ public class AgentWorkflowsController : ControllerBase
     /// Does not trigger external Python AI execution.
     /// </summary>
     [HttpPost("{id:guid}/start")]
-    [Authorize(Roles = $"{AppRoles.WasteOfficer},{AppRoles.MunicipalManager}")]
+    [Authorize(Roles = AppRoles.AgentWorkflowAuthorityRoles)]
     [ProducesResponseType(typeof(AgentWorkflowSummaryDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]

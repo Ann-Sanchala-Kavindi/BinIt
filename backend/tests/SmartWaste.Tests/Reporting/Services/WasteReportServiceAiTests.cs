@@ -1,4 +1,5 @@
 using FluentAssertions;
+using SmartWaste.Application.Common.Exceptions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -81,6 +82,7 @@ public class WasteReportServiceAiTests
         result.TotalCount.Should().Be(2);
         result.Items.Should().HaveCount(2);
         result.Items.Should().OnlyContain(r => r.Status == WasteReportStatus.Verified);
+        result.Items.Should().OnlyContain(r => r.ReportReference == r.Id.ToString("N").Substring(0, 8).ToUpperInvariant());
         result.Items.Select(r => r.Description).Should().Contain(new[] { "Verified 1", "Verified 2" });
     }
 
@@ -112,5 +114,82 @@ public class WasteReportServiceAiTests
 
         result.Items.Should().ContainSingle();
         result.Items[0].AttachmentCount.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetReportForVerificationAiAsync_ReturnsOnlyRequestedSubmittedReport()
+    {
+        var (db, userManager) = CreateContext();
+        var target = new WasteReport
+        {
+            CitizenId = Guid.NewGuid(),
+            Description = "Target report description is untrusted input",
+            Status = WasteReportStatus.Submitted,
+            WasteType = WasteType.Organic,
+            Latitude = 6.9271,
+            Longitude = 79.8612,
+            AddressText = "Market entrance",
+            CreatedAt = DateTime.UtcNow,
+            Attachments = new List<ReportAttachment>
+            {
+                new() { StorageKey = "private-key", FileType = "image/jpeg" }
+            }
+        };
+        db.WasteReports.AddRange(target,
+            new WasteReport { CitizenId = Guid.NewGuid(), Description = "Other submitted report", Status = WasteReportStatus.Submitted });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService(db, userManager).GetReportForVerificationAiAsync(target.Id);
+
+        result.Id.Should().Be(target.Id);
+        result.ReportReference.Should().Be(target.Id.ToString("N")[..8].ToUpperInvariant());
+        result.Description.Should().Be(target.Description);
+        result.Status.Should().Be(WasteReportStatus.Submitted);
+        result.AttachmentCount.Should().Be(1);
+        target.Status.Should().Be(WasteReportStatus.Submitted);
+    }
+
+    [Fact]
+    public async Task GetReportForVerificationAiAsync_AllowsUnderReview()
+    {
+        var (db, userManager) = CreateContext();
+        var report = new WasteReport { CitizenId = Guid.NewGuid(), Description = "Under review", Status = WasteReportStatus.UnderReview };
+        db.WasteReports.Add(report);
+        await db.SaveChangesAsync();
+
+        var result = await CreateService(db, userManager).GetReportForVerificationAiAsync(report.Id);
+
+        result.Id.Should().Be(report.Id);
+        result.Status.Should().Be(WasteReportStatus.UnderReview);
+    }
+
+    [Theory]
+    [InlineData(WasteReportStatus.Verified)]
+    [InlineData(WasteReportStatus.Rejected)]
+    [InlineData(WasteReportStatus.Cancelled)]
+    [InlineData(WasteReportStatus.Scheduled)]
+    [InlineData(WasteReportStatus.InProgress)]
+    [InlineData(WasteReportStatus.Resolved)]
+    public async Task GetReportForVerificationAiAsync_RejectsIneligibleStatus(WasteReportStatus status)
+    {
+        var (db, userManager) = CreateContext();
+        var report = new WasteReport { CitizenId = Guid.NewGuid(), Description = "Ineligible report", Status = status };
+        db.WasteReports.Add(report);
+        await db.SaveChangesAsync();
+
+        var act = () => CreateService(db, userManager).GetReportForVerificationAiAsync(report.Id);
+
+        await act.Should().ThrowAsync<BusinessRuleConflictException>();
+        report.Status.Should().Be(status);
+    }
+
+    [Fact]
+    public async Task GetReportForVerificationAiAsync_UnknownIdThrowsNotFound()
+    {
+        var (db, userManager) = CreateContext();
+
+        var act = () => CreateService(db, userManager).GetReportForVerificationAiAsync(Guid.NewGuid());
+
+        await act.Should().ThrowAsync<NotFoundException>();
     }
 }
