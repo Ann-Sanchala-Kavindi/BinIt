@@ -128,7 +128,8 @@ builder.Services.AddCors(options =>
             .WithOrigins(
                 "http://localhost:3000",   // React web app (dev)
                 "http://localhost:5173",   // Vite dev server
-                "http://localhost:8080"    // Flutter web client
+                "http://localhost:8080",
+                "https://binit-web.onrender.com"
             )
             .AllowAnyHeader()
             .AllowAnyMethod();
