@@ -69,18 +69,16 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureAppConfiguration((context, config) =>
         {
-            var builtConfig = config.Build();
-            var existingConn = builtConfig.GetConnectionString("DefaultConnection");
-            var connToUse = (!string.IsNullOrWhiteSpace(existingConn) && !existingConn.Contains("CHANGE_ME"))
-                ? existingConn
-                : "Host=localhost;Port=5432;Database=smartwaste_db;Username=postgres;Password=postgres";
+            var connToUse = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection");
+            if (string.IsNullOrWhiteSpace(connToUse))
+            {
+                throw new InvalidOperationException("ConnectionStrings__DefaultConnection must point to an isolated test database.");
+            }
 
             config.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:DefaultConnection"] = connToUse,
-                ["Jwt:Key"] = !string.IsNullOrWhiteSpace(builtConfig["Jwt:Key"])
-                    ? builtConfig["Jwt:Key"]
-                    : "ThisIsASecretKeyForSmartWasteDevelopmentOnly12345!",
+                ["Jwt:Key"] = "CiSecretKeyForSmartWasteBackendTestingOnly123456!",
                 ["Jwt:Issuer"] = "SmartWaste.Api",
                 ["Jwt:Audience"] = "SmartWaste.Clients",
                 ["Jwt:ExpiryMinutes"] = "60",
@@ -89,6 +87,7 @@ public class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Storage:Supabase:Bucket"] = "waste-report-attachments",
                 ["Storage:Supabase:SignedUrlExpirySeconds"] = "900",
                 ["InternalService:ApiKey"] = "TestInternalServiceKey_12345!",
+                ["Seed:DevUserPassword"] = "DevPassword123!",
                 ["ReportTriggeredWorkflowWorker:Enabled"] = "false"
             });
         });

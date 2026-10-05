@@ -51,9 +51,15 @@ public class AssignmentReadServiceTests
     }
 
     [Fact]
-    public async Task DriverWithoutProfile_CannotReadMine()
+    public async Task DriverWithoutProfile_HasNoAssignmentsToRead()
     {
         await using var db = Db();
-        await FluentActions.Invoking(() => new AssignmentReadService(db).GetMineAsync(new AssignmentListQuery(), Guid.NewGuid(), AppRoles.Driver)).Should().ThrowAsync<NotFoundException>();
+        var driver = new AppUser { Id = Guid.NewGuid(), FullName = "Unassigned driver", UserName = "unassigned-driver" };
+        db.Users.Add(driver);
+        await db.SaveChangesAsync();
+
+        var result = await new AssignmentReadService(db).GetMineAsync(new AssignmentListQuery(), driver.Id, AppRoles.Driver);
+        result.Items.Should().BeEmpty();
+        result.TotalCount.Should().Be(0);
     }
 }

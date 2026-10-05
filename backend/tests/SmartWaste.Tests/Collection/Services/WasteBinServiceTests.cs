@@ -1010,6 +1010,7 @@ public class WasteBinServiceTests
         };
 
         db.WasteBins.Add(bin);
+        db.Users.Add(new AppUser { Id = officerId, UserName = "bin-public-detail-officer", FullName = "Bin detail officer" });
         db.BinObservations.Add(obs);
         db.CollectionTasks.Add(task);
         await db.SaveChangesAsync();

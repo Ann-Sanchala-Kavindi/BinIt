@@ -1,11 +1,9 @@
 using System.Data.Common;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Npgsql;
 using SmartWaste.Domain.Entities;
 using SmartWaste.Infrastructure.Persistence;
-using Xunit.Sdk;
 using Moq;
 using Microsoft.AspNetCore.Identity;
 using SmartWaste.Application.Collection.DTOs.Requests;
@@ -29,34 +27,21 @@ using SmartWaste.Infrastructure.Workflow.Services;
 namespace SmartWaste.Tests.Collection.Persistence;
 
 /// <summary>
-/// Explicitly opt-in PostgreSQL verification for the C3.3a migration.
-/// Every write is isolated in a transaction that is rolled back in finally.
+/// PostgreSQL verification against the isolated CI test database.
 /// </summary>
 [Trait("Category", "PostgreSql")]
 public class C3FleetPostgreSqlPersistenceTests
 {
-    private const string EnableEnvironmentVariable = "SMARTWASTE_RUN_C3_POSTGRESQL_TESTS";
-
-    private static string GetDevelopmentConnectionString()
+    private static string GetTestConnectionString()
     {
-        if (!string.Equals(Environment.GetEnvironmentVariable(EnableEnvironmentVariable), "true", StringComparison.OrdinalIgnoreCase))
-        {
-            throw SkipException.ForSkip(
-                $"Set {EnableEnvironmentVariable}=true to run this transaction-scoped development PostgreSQL test.");
-        }
-
-        var configuration = new ConfigurationBuilder()
-            .AddUserSecrets(typeof(global::Program).Assembly, optional: false)
-            .Build();
-
-        return configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("The development connection setting is not configured.");
+        return Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+            ?? throw new InvalidOperationException("ConnectionStrings__DefaultConnection must point to an isolated test database.");
     }
 
     private static AppDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseNpgsql(GetDevelopmentConnectionString())
+            .UseNpgsql(GetTestConnectionString())
             .Options;
 
         return new AppDbContext(options);
@@ -248,21 +233,34 @@ public class C3FleetPostgreSqlPersistenceTests
     {
         await using var db = CreateContext();
         await db.Database.OpenConnectionAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync();
 
         try
         {
-            (await ScalarAsync<long>(db, """
+            var driver = CreateTestUser();
+            var role = await db.Roles.SingleOrDefaultAsync(x => x.Name == AppRoles.Driver);
+            if (role is null)
+            {
+                role = new IdentityRole<Guid> { Id = Guid.NewGuid(), Name = AppRoles.Driver, NormalizedName = AppRoles.Driver.ToUpperInvariant() };
+                db.Roles.Add(role);
+            }
+            db.Users.Add(driver);
+            db.UserRoles.Add(new IdentityUserRole<Guid> { UserId = driver.Id, RoleId = role.Id });
+            await db.SaveChangesAsync();
+
+            (await ScalarAsync<long>(db, $"""
                 SELECT COUNT(*)
                 FROM "AspNetUsers" AS u
                 INNER JOIN "AspNetUserRoles" AS ur ON ur."UserId" = u."Id"
                 INNER JOIN "AspNetRoles" AS r ON r."Id" = ur."RoleId"
                 LEFT JOIN "DriverProfiles" AS dp ON dp."UserId" = u."Id"
-                WHERE r."Name" = 'Driver' AND dp."UserId" IS NULL;
+                WHERE u."Id" = '{driver.Id}' AND r."Name" = 'Driver' AND dp."UserId" IS NULL;
                 """))
-                .Should().BeGreaterThan(0, "an existing Driver account must remain valid before its profile is provisioned");
+                .Should().Be(1, "a Driver account can exist before its profile is provisioned");
         }
         finally
         {
+            await transaction.RollbackAsync();
             await db.Database.CloseConnectionAsync();
         }
     }
@@ -586,11 +584,15 @@ public class C3FleetPostgreSqlPersistenceTests
 
         try
         {
-            var taskIds = await GuidListAsync(db, "SELECT \"Id\" FROM \"CollectionTasks\" ORDER BY \"CreatedAt\" LIMIT 2;");
-            if (taskIds.Count < 2)
-            {
-                throw SkipException.ForSkip("C3 assignment PostgreSQL verification requires two existing C2 collection tasks.");
-            }
+            var suffix = Guid.NewGuid();
+            var taskOwner = CreateTestUser();
+            var firstBin = new WasteBin { BinCode = $"C3-A-{suffix:N}"[..20], CapacityLiters = 100, Latitude = 6.9, Longitude = 79.9 };
+            var secondBin = new WasteBin { BinCode = $"C3-B-{suffix:N}"[..20], CapacityLiters = 100, Latitude = 6.91, Longitude = 79.91 };
+            var firstTask = new CollectionTask { TaskCode = $"C3-A-{suffix:N}"[..20], WasteBinId = firstBin.Id, CollectionReason = CollectionReason.OfficerDiscretion, SchedulingReason = "C3 constraint test", Status = CollectionTaskStatus.Scheduled, ScheduledAt = DateTime.UtcNow.AddHours(1), CreatedByUserId = taskOwner.Id };
+            var secondTask = new CollectionTask { TaskCode = $"C3-B-{suffix:N}"[..20], WasteBinId = secondBin.Id, CollectionReason = CollectionReason.OfficerDiscretion, SchedulingReason = "C3 constraint test", Status = CollectionTaskStatus.Scheduled, ScheduledAt = DateTime.UtcNow.AddHours(2), CreatedByUserId = taskOwner.Id };
+            db.AddRange(taskOwner, firstBin, secondBin, firstTask, secondTask);
+            await db.SaveChangesAsync();
+            var taskIds = new[] { firstTask.Id, secondTask.Id };
 
             var driver = CreateTestUser();
             var otherDriver = CreateTestUser();
