@@ -133,7 +133,10 @@ public class AgentWorkflowExecutionsApiIntegrationTests
             VerifiedAt = DateTime.UtcNow.AddHours(-1)
         });
 
-        var futureTime = DateTime.UtcNow.AddHours(4).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo");
+        var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zone)).AddDays(2);
+        var futureTime = TimeZoneInfo.ConvertTimeToUtc(localDate.ToDateTime(new TimeOnly(9, 0)), zone)
+            .ToString("yyyy-MM-ddTHH:mm:ssZ");
         var c2Output = JsonSerializer.Serialize(new
         {
             status = "completed",
@@ -740,4 +743,3 @@ public class AgentWorkflowExecutionsApiIntegrationTests
         return (workflow, driverUser.Id, vehicleId, taskId);
     }
 }
-

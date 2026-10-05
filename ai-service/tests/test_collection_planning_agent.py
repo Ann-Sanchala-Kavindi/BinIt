@@ -31,7 +31,7 @@ from app.tools.collection_needs import CollectionNeedsSnapshot, get_collection_n
 # Fixed reference timestamp — all tests use this; never touches wall-clock time
 # ──────────────────────────────────────────────────────────────────────────────
 FIXED_REFERENCE_AT = datetime(2026, 9, 28, 0, 0, 0, tzinfo=timezone.utc)
-FUTURE_AT = FIXED_REFERENCE_AT + timedelta(hours=24)
+FUTURE_AT = FIXED_REFERENCE_AT + timedelta(hours=27)  # 08:30 Asia/Colombo
 PAST_AT = FIXED_REFERENCE_AT - timedelta(hours=1)
 FUTURE_ISO = FUTURE_AT.strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -532,11 +532,12 @@ class TestProposedScheduleValidation:
 
     def test_scheduled_at_equal_to_reference_is_accepted(self):
         first, second = _need(), _need()
-        exactly_at_ref = FIXED_REFERENCE_AT.strftime("%Y-%m-%dT%H:%M:%SZ")
+        reference = datetime(2026, 9, 28, 4, 30, tzinfo=timezone.utc)  # 10:00 local
+        exactly_at_ref = reference.strftime("%Y-%m-%dT%H:%M:%SZ")
         payload = _group_payload([first, second], scheduled_at_iso=exactly_at_ref)
         structured = _StructuredPlanningPayload.model_validate(payload)
         validate_planning_payload(
-            structured, [first, second], planning_reference_at=FIXED_REFERENCE_AT,
+            structured, [first, second], planning_reference_at=reference,
         )
 
     def test_scheduled_at_one_second_before_reference_is_rejected(self):
@@ -975,6 +976,8 @@ class TestDeterministicTelemetryWarnings:
         )
 
         assert result.status == "completed"
+
+
         assert any(str(bin_need.id) in w for w in result.warnings)
 
     # D. Missing telemetry + separateHandling with proposedSchedule
@@ -1108,3 +1111,62 @@ class TestDeterministicTelemetryWarnings:
         assert model.invoke.call_count == 1
         assert result.status == "completed"
 
+
+class TestMunicipalCollectionWindow:
+    NOW = datetime(2026, 10, 5, 16, 30, tzinfo=timezone.utc)  # 22:00 Colombo
+    VALID = "2026-10-06T02:30:00Z"  # 08:00 Colombo
+    INVALID = "2026-10-05T21:00:00Z"  # 02:30 Colombo next day
+
+    @staticmethod
+    def groups(items, times):
+        payload = _group_payload(items[:2], scheduled_at_iso=times[0])
+        for index in range(1, len(times)):
+            group = json.loads(json.dumps(payload["candidateGroups"][0]))
+            group["groupId"] = f"group-{index + 1}"
+            group["attentionOrder"] = index + 1
+            group["needReferences"] = [_reference(item) for item in items[index * 2:index * 2 + 2]]
+            group["proposedSchedule"]["scheduledAt"] = times[index]
+            payload["candidateGroups"].append(group)
+        return payload
+
+    def test_all_candidate_groups_are_validated_as_one_result(self):
+        items = [_need() for _ in range(6)]
+        valid = self.groups(items, ["2026-10-06T03:30:00Z", "2026-10-06T06:00:00Z", "2026-10-06T08:30:00Z"])
+        validate_planning_payload(_StructuredPlanningPayload.model_validate(valid), items, self.NOW)
+        invalid = self.groups(items, ["2026-10-06T03:30:00Z", self.INVALID, "2026-10-06T08:30:00Z"])
+        with pytest.raises(CollectionPlanningValidationError, match="group-2.*outside the allowed"):
+            validate_planning_payload(_StructuredPlanningPayload.model_validate(invalid), items, self.NOW)
+
+    def test_separate_handling_uses_same_window(self):
+        item = _need()
+        payload = _separate_handling_payload(item, scheduled_at_iso=self.INVALID)
+        with pytest.raises(CollectionPlanningValidationError, match="outside the allowed"):
+            validate_planning_payload(_StructuredPlanningPayload.model_validate(payload), [item], self.NOW)
+
+    @patch(_PATCH_FETCH_ALL)
+    @patch("app.agents.collection_planning_agent.invoke_chat_model")
+    def test_invalid_first_attempt_retries_with_corrective_context(self, invoke, fetch):
+        items = [_need(), _need()]
+        fetch.return_value = _snapshot(items)
+        invalid = self.groups(items, [self.INVALID])
+        valid = self.groups(items, [self.VALID])
+        invoke.side_effect = [AIMessage(content=json.dumps(invalid)), AIMessage(content=json.dumps(valid))]
+        result = run_collection_planning(CollectionPlanningRequest(objective="Schedule collected needs"),
+                                         model=MagicMock(), planning_reference_at=self.NOW)
+        assert invoke.call_count == 2
+        assert result.candidate_groups[0].proposed_schedule.scheduled_at == datetime(2026, 10, 6, 2, 30, tzinfo=timezone.utc)
+        messages = invoke.call_args.args[1]
+        assert "02:30 local is outside" in messages[-1].content
+        assert "Asia/Colombo" in messages[1].content
+        assert "2026-10-06T08:00:00+05:30" in messages[1].content
+
+    @patch(_PATCH_FETCH_ALL)
+    @patch("app.agents.collection_planning_agent.invoke_chat_model")
+    def test_exhausted_invalid_output_fails_existing_two_attempt_path(self, invoke, fetch):
+        items = [_need(), _need()]
+        fetch.return_value = _snapshot(items)
+        invoke.return_value = AIMessage(content=json.dumps(self.groups(items, [self.INVALID])))
+        with pytest.raises(CollectionPlanningModelError, match="after 2 attempt"):
+            run_collection_planning(CollectionPlanningRequest(objective="Schedule collected needs"),
+                                    model=MagicMock(), planning_reference_at=self.NOW)
+        assert invoke.call_count == 2

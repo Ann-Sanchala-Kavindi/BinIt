@@ -151,6 +151,44 @@ public class AgentWorkflowApprovalsApiIntegrationTests
     // =========================================================================
 
     [Fact]
+    public async Task ApproveCollection_OutOfHoursC2Plan_Returns409WithoutMutatingWorkflow()
+    {
+        var (client, db, authService, scope) = CreateTestClient();
+        using var _ = scope;
+        var (manager, token) = CreateUserAndToken(db, authService, AppRoles.MunicipalManager);
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo");
+        var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zone)).AddDays(2);
+        var overnightUtc = TimeZoneInfo.ConvertTimeToUtc(
+            localDate.ToDateTime(new TimeOnly(2, 30)), zone);
+        var c2Output = JsonSerializer.Serialize(new
+        {
+            status = "completed", isCompleteSnapshot = true,
+            candidateGroups = new[] { new
+            {
+                groupId = "group-1",
+                proposedSchedule = new { scheduledAt = overnightUtc.ToString("O"), schedulingReason = "Early collection." },
+                needReferences = new[] { new { needId = Guid.NewGuid(), targetType = "Report", collectionReason = "VerifiedReport" } }
+            } },
+            separateHandling = Array.Empty<object>(), deferredNeeds = Array.Empty<object>()
+        });
+        var (workflow, _) = SeedWorkflowWithStep(db, manager.Id,
+            AgentWorkflowStatus.AwaitingCollectionApproval, WorkflowStepType.CollectionPlanning, c2Output);
+
+        var request = CreateRequest(HttpMethod.Post,
+            $"/api/v1/agent-workflows/{workflow.Id}/collection-approval/approve", token,
+            new ApproveCollectionPlanningRequest { ExpectedVersion = 1 });
+        var response = await client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+        problem!.Detail.Should().Contain("municipality timezone");
+        (await db.AgentWorkflows.Include(w => w.Approvals).SingleAsync(w => w.Id == workflow.Id))
+            .Status.Should().Be(AgentWorkflowStatus.AwaitingCollectionApproval);
+        (await db.AgentWorkflowApprovals.CountAsync()).Should().Be(0);
+        (await db.CollectionTasks.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
     public async Task ApproveCollection_MunicipalManager_ValidProposal_Returns200WithUpdatedWorkflow()
     {
         var (client, db, authService, scope) = CreateTestClient();

@@ -95,6 +95,12 @@ public static class DependencyInjection
 
         // Agentic AI Workflow Services
         services.AddSingleton<IAgentWorkflowStateMachine, AgentWorkflowStateMachine>();
+        services.AddOptions<CollectionScheduleOptions>()
+            .Bind(configuration.GetSection("Municipality"))
+            .Validate(options => !string.IsNullOrWhiteSpace(configuration["Municipality:TimeZoneId"]) &&
+                CollectionSchedulePolicy.IsValidConfiguration(options),
+                "Municipality timezone and collection window must be valid.")
+            .ValidateOnStart();
         services.AddScoped<IAgentWorkflowService, AgentWorkflowService>();
         var workerTimeoutSeconds = configuration.GetValue<int?>("AiService:TimeoutSeconds") ?? 300;
         services.AddOptions<ReportTriggeredWorkflowWorkerOptions>()

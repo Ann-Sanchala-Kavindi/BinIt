@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Identity;
 using SmartWaste.Application.Collection.DTOs.Requests;
 using SmartWaste.Application.Collection.Interfaces;
@@ -37,6 +38,8 @@ public class AgentWorkflowService : IAgentWorkflowService
     private readonly ICollectionAssignmentService? _collectionAssignmentService;
     private readonly UserManager<AppUser>? _userManager;
     private readonly IPythonOrchestrationClient? _pythonOrchestrationClient;
+    private readonly CollectionSchedulePolicy _collectionSchedulePolicy;
+    private readonly TimeProvider _timeProvider;
 
     public AgentWorkflowService(
         AppDbContext db,
@@ -45,7 +48,9 @@ public class AgentWorkflowService : IAgentWorkflowService
         ICollectionTaskService? collectionTaskService = null,
         ICollectionAssignmentService? collectionAssignmentService = null,
         UserManager<AppUser>? userManager = null,
-        IPythonOrchestrationClient? pythonOrchestrationClient = null)
+        IPythonOrchestrationClient? pythonOrchestrationClient = null,
+        IOptions<CollectionScheduleOptions>? collectionScheduleOptions = null,
+        TimeProvider? timeProvider = null)
     {
         _db = db;
         _stateMachine = stateMachine;
@@ -54,6 +59,9 @@ public class AgentWorkflowService : IAgentWorkflowService
         _collectionAssignmentService = collectionAssignmentService;
         _userManager = userManager;
         _pythonOrchestrationClient = pythonOrchestrationClient;
+        _collectionSchedulePolicy = new CollectionSchedulePolicy(
+            collectionScheduleOptions?.Value ?? new CollectionScheduleOptions());
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
 
@@ -1384,7 +1392,7 @@ public class AgentWorkflowService : IAgentWorkflowService
         return MapToDetailDto(workflow);
     }
 
-    private static void ValidateCollectionPlanningOutputForApproval(string? outputJson)
+    private void ValidateCollectionPlanningOutputForApproval(string? outputJson)
     {
         if (string.IsNullOrWhiteSpace(outputJson))
         {
@@ -1426,6 +1434,36 @@ public class AgentWorkflowService : IAgentWorkflowService
             {
                 throw new BusinessRuleConflictException(
                     "The collection proposal is not based on a complete authoritative snapshot and cannot be approved.");
+            }
+
+            // Validate every available executable schedule before recording the human decision.
+            // Legacy payloads without canonical arrays retain their existing approval behavior;
+            // task execution still requires and validates the complete canonical plan.
+            var nowUtc = _timeProvider.GetUtcNow();
+            foreach (var collectionName in new[] { "candidateGroups", "separateHandling" })
+            {
+                if (!root.TryGetProperty(collectionName, out var collection))
+                {
+                    continue;
+                }
+                if (collection.ValueKind != JsonValueKind.Array)
+                {
+                    throw new BusinessRuleConflictException($"The collection proposal has a malformed {collectionName} collection.");
+                }
+
+                foreach (var item in collection.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object ||
+                        !item.TryGetProperty("proposedSchedule", out var schedule) ||
+                        schedule.ValueKind != JsonValueKind.Object ||
+                        !schedule.TryGetProperty("scheduledAt", out var timestamp))
+                    {
+                        throw new BusinessRuleConflictException("An executable collection proposal is missing its scheduledAt time.");
+                    }
+
+                    _collectionSchedulePolicy.ValidateProposedStart(
+                        timestamp.ValueKind == JsonValueKind.String ? timestamp.GetString() : null, nowUtc);
+                }
             }
         }
         catch (JsonException ex)
@@ -1629,8 +1667,10 @@ public class AgentWorkflowService : IAgentWorkflowService
             throw new BusinessRuleConflictException("The approved collection planning step contains no structured output.");
         }
 
-        // 6. Flatten approved executable proposals and validate C2 output
-        var (instructions, deferredNeedCount) = ParseAndFlattenCollectionPlan(c2Step.OutputJson);
+        // 6. Flatten and validate all approved schedules before any mutation.
+        var nowUtc = _timeProvider.GetUtcNow();
+        var (instructions, deferredNeedCount) = ParseAndFlattenCollectionPlan(
+            c2Step.OutputJson, _collectionSchedulePolicy, nowUtc);
 
         if (instructions.Count == 0)
         {
@@ -1638,16 +1678,9 @@ public class AgentWorkflowService : IAgentWorkflowService
                 "Approved collection plan contains zero executable collection needs to schedule (all needs are deferred or empty). Cannot create collection tasks.");
         }
 
-        // 7. Revalidate proposed schedules are not in the past
-        var nowUtc = DateTime.UtcNow;
+        // 7. Revalidate required scheduling reasons before any mutation.
         foreach (var inst in instructions)
         {
-            if (inst.ScheduledAt < nowUtc)
-            {
-                throw new BusinessRuleConflictException(
-                    $"The proposed schedule time '{inst.ScheduledAt:O}' for collection need '{inst.NeedId}' is in the past and cannot be executed.");
-            }
-
             if (string.IsNullOrWhiteSpace(inst.SchedulingReason))
             {
                 throw new BusinessRuleConflictException(
@@ -2809,7 +2842,7 @@ public class AgentWorkflowService : IAgentWorkflowService
     private sealed class ProposedScheduleExecutionItem
     {
         [JsonPropertyName("scheduledAt")]
-        public DateTime? ScheduledAt { get; set; }
+        public string? ScheduledAt { get; set; }
 
         [JsonPropertyName("schedulingReason")]
         public string? SchedulingReason { get; set; }
@@ -2846,7 +2879,8 @@ public class AgentWorkflowService : IAgentWorkflowService
         public DateTime ScheduledAt { get; set; }
     }
 
-    private static (List<ExecutableNeedInstruction> Instructions, int DeferredCount) ParseAndFlattenCollectionPlan(string outputJson)
+    private static (List<ExecutableNeedInstruction> Instructions, int DeferredCount) ParseAndFlattenCollectionPlan(
+        string outputJson, CollectionSchedulePolicy schedulePolicy, DateTimeOffset nowUtc)
     {
         if (string.IsNullOrWhiteSpace(outputJson))
         {
@@ -2897,11 +2931,7 @@ public class AgentWorkflowService : IAgentWorkflowService
                     $"Candidate group '{group.GroupId ?? "unknown"}' in the approved plan is missing a proposed schedule.");
             }
 
-            if (!group.ProposedSchedule.ScheduledAt.HasValue)
-            {
-                throw new BusinessRuleConflictException(
-                    $"Candidate group '{group.GroupId ?? "unknown"}' proposed schedule is missing a valid scheduledAt.");
-            }
+            var scheduledAtUtc = schedulePolicy.ValidateProposedStart(group.ProposedSchedule.ScheduledAt, nowUtc);
 
             var schedulingReason = group.ProposedSchedule.SchedulingReason?.Trim();
             if (string.IsNullOrWhiteSpace(schedulingReason) || schedulingReason.Length < 5)
@@ -2953,7 +2983,7 @@ public class AgentWorkflowService : IAgentWorkflowService
                     NeedId = needRef.NeedId.Value,
                     TargetType = needRef.TargetType.Trim(),
                     CollectionReason = needRef.CollectionReason.Trim(),
-                    ScheduledAt = DateTime.SpecifyKind(group.ProposedSchedule.ScheduledAt.Value, DateTimeKind.Utc),
+                    ScheduledAt = scheduledAtUtc,
                     SchedulingReason = schedulingReason,
                     HandlingNotes = handlingNotes
                 });
@@ -2989,11 +3019,7 @@ public class AgentWorkflowService : IAgentWorkflowService
                     $"Separate handling item for need '{sepItem.NeedReference.NeedId}' is missing a proposed schedule.");
             }
 
-            if (!sepItem.ProposedSchedule.ScheduledAt.HasValue)
-            {
-                throw new BusinessRuleConflictException(
-                    $"Separate handling item for need '{sepItem.NeedReference.NeedId}' proposed schedule is missing a valid scheduledAt.");
-            }
+            var scheduledAtUtc = schedulePolicy.ValidateProposedStart(sepItem.ProposedSchedule.ScheduledAt, nowUtc);
 
             var schedulingReason = sepItem.ProposedSchedule.SchedulingReason?.Trim();
             if (string.IsNullOrWhiteSpace(schedulingReason) || schedulingReason.Length < 5)
@@ -3007,7 +3033,7 @@ public class AgentWorkflowService : IAgentWorkflowService
                 NeedId = sepItem.NeedReference.NeedId.Value,
                 TargetType = sepItem.NeedReference.TargetType.Trim(),
                 CollectionReason = sepItem.NeedReference.CollectionReason.Trim(),
-                ScheduledAt = DateTime.SpecifyKind(sepItem.ProposedSchedule.ScheduledAt.Value, DateTimeKind.Utc),
+                ScheduledAt = scheduledAtUtc,
                 SchedulingReason = schedulingReason,
                 HandlingNotes = null
             });

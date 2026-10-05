@@ -26,6 +26,13 @@ namespace SmartWaste.Tests.Workflow.Services;
 
 public class AgentWorkflowExecutionBridgeTests
 {
+    private static DateTime NextValidUtc(int localHour = 9)
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo");
+        var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zone)).AddDays(2);
+        return TimeZoneInfo.ConvertTimeToUtc(localDate.ToDateTime(new TimeOnly(localHour, 0)), zone);
+    }
+
     private static AppDbContext CreateContext(string dbName)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
@@ -43,12 +50,12 @@ public class AgentWorkflowExecutionBridgeTests
         return (service, taskServiceMock);
     }
 
-    private static AgentWorkflowService CreateServiceWithRealTaskService(AppDbContext db)
+    private static AgentWorkflowService CreateServiceWithRealTaskService(AppDbContext db, TimeProvider? clock = null)
     {
         var stateMachine = new AgentWorkflowStateMachine();
         var logger = NullLogger<AgentWorkflowService>.Instance;
         var taskService = new CollectionTaskService(db);
-        return new AgentWorkflowService(db, stateMachine, logger, taskService);
+        return new AgentWorkflowService(db, stateMachine, logger, taskService, timeProvider: clock);
     }
 
     private static (Guid workflowId, Guid stepId, Guid managerId, Guid reportId, Guid binId) SeedWorkflowWithApprovedC2Plan(
@@ -57,7 +64,8 @@ public class AgentWorkflowExecutionBridgeTests
         AgentWorkflowStatus status = AgentWorkflowStatus.CollectionApproved,
         int version = 3,
         Guid? explicitReportId = null,
-        Guid? explicitBinId = null)
+        Guid? explicitBinId = null,
+        AgentWorkflowTriggerType trigger = AgentWorkflowTriggerType.ManualOperationalPlanning)
     {
         var managerId = Guid.NewGuid();
         db.Users.Add(new AppUser
@@ -122,6 +130,8 @@ public class AgentWorkflowExecutionBridgeTests
             Id = Guid.NewGuid(),
             Objective = "Authoritative collection task execution test",
             Status = status,
+            TriggerType = trigger,
+            TriggeringWasteReportId = trigger == AgentWorkflowTriggerType.CitizenReportSubmission ? reportId : null,
             CurrentStep = WorkflowStepType.CollectionPlanning,
             InitiatedByUserId = managerId,
             Version = version,
@@ -160,6 +170,102 @@ public class AgentWorkflowExecutionBridgeTests
         return (workflow.Id, c2Step.Id, managerId, reportId, binId);
     }
 
+    private sealed class FixedTimeProvider(DateTimeOffset instant) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => instant;
+    }
+
+    [Theory]
+    [InlineData(AgentWorkflowTriggerType.ManualOperationalPlanning, false)]
+    [InlineData(AgentWorkflowTriggerType.CitizenReportSubmission, false)]
+    [InlineData(AgentWorkflowTriggerType.ManualOperationalPlanning, true)]
+    [InlineData(AgentWorkflowTriggerType.CitizenReportSubmission, true)]
+    public async Task ExecuteCollectionPlanAsync_MunicipalWindowValidatesWholePlanBeforeWrites(
+        AgentWorkflowTriggerType trigger, bool invalidMiddle)
+    {
+        using var db = CreateContext(Guid.NewGuid().ToString());
+        var reportId = Guid.NewGuid();
+        var binId = Guid.NewGuid();
+        var secondReportId = Guid.NewGuid();
+        var nineUtc = NextValidUtc(9);
+        var nineLocalIso = TimeZoneInfo.ConvertTime(new DateTimeOffset(nineUtc),
+            TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo")).ToString("O");
+        var elevenUtc = NextValidUtc(11);
+        var fourteenThirtyUtc = NextValidUtc(14).AddMinutes(30);
+        var overnightUtc = NextValidUtc(9).Date.AddDays(1).AddHours(-3); // 02:30 local next day
+        var middleUtc = invalidMiddle ? overnightUtc : elevenUtc;
+
+        var c2Output = JsonSerializer.Serialize(new
+        {
+            status = "completed",
+            isCompleteSnapshot = true,
+            candidateGroups = new[]
+            {
+                new { groupId = "group-1", proposedSchedule = new { scheduledAt = nineLocalIso, schedulingReason = "Morning report collection." }, needReferences = new[] { new { needId = reportId, targetType = "Report", collectionReason = "VerifiedReport" } } },
+                new { groupId = "group-2", proposedSchedule = new { scheduledAt = middleUtc.ToString("O"), schedulingReason = "Municipal bin collection." }, needReferences = new[] { new { needId = binId, targetType = "Bin", collectionReason = "FullOrBlockedBin" } } },
+                new { groupId = "group-3", proposedSchedule = new { scheduledAt = fourteenThirtyUtc.ToString("O"), schedulingReason = "Afternoon report collection." }, needReferences = new[] { new { needId = secondReportId, targetType = "Report", collectionReason = "VerifiedReport" } } }
+            },
+            separateHandling = Array.Empty<object>(),
+            deferredNeeds = Array.Empty<object>()
+        });
+        var (workflowId, _, managerId, _, _) = SeedWorkflowWithApprovedC2Plan(
+            db, c2Output, explicitReportId: reportId, explicitBinId: binId, trigger: trigger);
+        db.WasteReports.Add(new WasteReport
+        {
+            Id = secondReportId, CitizenId = Guid.NewGuid(), Description = "Second verified collection report",
+            Latitude = 6.9, Longitude = 79.8, Status = WasteReportStatus.Verified,
+            WasteType = WasteType.General, CreatedAt = DateTime.UtcNow.AddDays(-1), VerifiedAt = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var sut = CreateServiceWithRealTaskService(db);
+
+        if (invalidMiddle)
+        {
+            var act = () => sut.ExecuteCollectionPlanAsync(workflowId,
+                new ExecuteCollectionPlanRequest { ExpectedVersion = 3 }, managerId);
+            await act.Should().ThrowAsync<BusinessRuleConflictException>().WithMessage("*municipality timezone*");
+            (await db.CollectionTasks.CountAsync()).Should().Be(0);
+            (await db.AgentWorkflowExecutionResults.CountAsync()).Should().Be(0);
+            (await db.AgentWorkflows.FindAsync(workflowId))!.Status.Should().Be(AgentWorkflowStatus.CollectionApproved);
+        }
+        else
+        {
+            var result = await sut.ExecuteCollectionPlanAsync(workflowId,
+                new ExecuteCollectionPlanRequest { ExpectedVersion = 3 }, managerId);
+            result.Status.Should().Be(AgentWorkflowStatus.FleetPlanning);
+            var tasks = await db.CollectionTasks.ToListAsync();
+            tasks.Should().HaveCount(3);
+            tasks.Single(t => t.WasteReportId == reportId).ScheduledAt.Should().Be(nineUtc);
+            tasks.Single(t => t.WasteBinId == binId).ScheduledAt.Should().Be(elevenUtc);
+            tasks.Single(t => t.WasteReportId == secondReportId).ScheduledAt.Should().Be(fourteenThirtyUtc);
+        }
+    }
+
+    [Fact]
+    public async Task ExecuteCollectionPlanAsync_StaleAfterHumanApproval_CreatesNoTasks()
+    {
+        using var db = CreateContext(Guid.NewGuid().ToString());
+        var reportId = Guid.NewGuid();
+        var proposed = NextValidUtc(9);
+        var c2Output = JsonSerializer.Serialize(new
+        {
+            status = "completed", isCompleteSnapshot = true,
+            candidateGroups = Array.Empty<object>(),
+            separateHandling = new[] { new { needReference = new { needId = reportId, targetType = "Report", collectionReason = "VerifiedReport" }, proposedSchedule = new { scheduledAt = proposed.ToString("O"), schedulingReason = "Approved morning pickup." } } },
+            deferredNeeds = Array.Empty<object>()
+        });
+        var (workflowId, _, managerId, _, _) = SeedWorkflowWithApprovedC2Plan(
+            db, c2Output, explicitReportId: reportId);
+        var clock = new FixedTimeProvider(new DateTimeOffset(proposed.AddHours(1), TimeSpan.Zero));
+        var sut = CreateServiceWithRealTaskService(db, clock);
+
+        var act = () => sut.ExecuteCollectionPlanAsync(workflowId,
+            new ExecuteCollectionPlanRequest { ExpectedVersion = 3 }, managerId);
+        await act.Should().ThrowAsync<BusinessRuleConflictException>().WithMessage("*past*");
+        (await db.CollectionTasks.CountAsync()).Should().Be(0);
+        (await db.AgentWorkflows.FindAsync(workflowId))!.Status.Should().Be(AgentWorkflowStatus.CollectionApproved);
+    }
+
     [Fact]
     public async Task ExecuteCollectionPlanAsync_CandidateGroup_CreatesScheduledTasksAndTransitionsToFleetPlanning()
     {
@@ -168,7 +274,7 @@ public class AgentWorkflowExecutionBridgeTests
 
         var reportId = Guid.NewGuid();
         var binId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(4).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -260,7 +366,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var reportId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(5).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -306,7 +412,7 @@ public class AgentWorkflowExecutionBridgeTests
         var binId = Guid.NewGuid();
         var deferredId1 = Guid.NewGuid();
         var deferredId2 = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(6).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -397,7 +503,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var duplicateId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -447,7 +553,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var reportId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(3).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -495,7 +601,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var reportId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(3).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -690,7 +796,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var reportId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -738,7 +844,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var reportId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(3).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -805,7 +911,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var reportId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -922,8 +1028,8 @@ public class AgentWorkflowExecutionBridgeTests
         };
         db.WasteReports.Add(report);
 
-        var futureTime1 = DateTime.UtcNow.AddHours(4).ToString("yyyy-MM-ddTHH:mm:ssZ");
-        var futureTime2 = DateTime.UtcNow.AddHours(5).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime1 = NextValidUtc(9).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime2 = NextValidUtc(10).ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         // Exact canonical JSON from ai-service/docs/agent_contracts.md
         var canonicalJson = JsonSerializer.Serialize(new
@@ -1016,7 +1122,7 @@ public class AgentWorkflowExecutionBridgeTests
 
         var reportId = Guid.NewGuid();
         var distinctiveReason = "Prioritize verified overflow report before evening traffic.";
-        var futureTime = DateTime.UtcNow.AddHours(3).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -1055,7 +1161,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var reportId = Guid.NewGuid();
-        var exactUtcInstant = DateTime.UtcNow.AddDays(2).Date.AddHours(14); // 14:00 UTC
+        var exactUtcInstant = NextValidUtc(); // 09:00 municipality local time
         var timeString = exactUtcInstant.ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
@@ -1095,7 +1201,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var reportId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(3).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         // C2 JSON contains ONLY needId, no targetId, latitude, longitude, or volume
         var c2Output = JsonSerializer.Serialize(new
@@ -1137,7 +1243,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var duplicateNeedId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -1187,7 +1293,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var overlappingId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -1314,7 +1420,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var reportId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -1393,7 +1499,7 @@ public class AgentWorkflowExecutionBridgeTests
         db.WasteReports.Add(new WasteReport { Id = reportA, CitizenId = Guid.NewGuid(), Description = "Report A", Latitude = 6.9, Longitude = 79.8, Status = WasteReportStatus.Verified, CreatedAt = DateTime.UtcNow.AddHours(-5), VerifiedAt = DateTime.UtcNow.AddHours(-1) });
         db.WasteReports.Add(new WasteReport { Id = reportB, CitizenId = Guid.NewGuid(), Description = "Report B", Latitude = 6.9, Longitude = 79.8, Status = WasteReportStatus.Verified, CreatedAt = DateTime.UtcNow.AddHours(-5), VerifiedAt = DateTime.UtcNow.AddHours(-1) });
 
-        var futureTime = DateTime.UtcNow.AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2OutputStepA = JsonSerializer.Serialize(new
         {
@@ -1486,7 +1592,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var reportId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -1523,7 +1629,7 @@ public class AgentWorkflowExecutionBridgeTests
         using var db = CreateContext(dbName);
 
         var reportId = Guid.NewGuid();
-        var futureTime = DateTime.UtcNow.AddHours(2).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var futureTime = NextValidUtc().ToString("yyyy-MM-ddTHH:mm:ssZ");
 
         var c2Output = JsonSerializer.Serialize(new
         {
@@ -1554,4 +1660,3 @@ public class AgentWorkflowExecutionBridgeTests
         taskHistories.Should().Contain(h => h.Notes == "Task created from approved AI collection plan");
     }
 }
-

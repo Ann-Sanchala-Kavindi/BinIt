@@ -24,11 +24,11 @@ public class AgentWorkflowApprovalServiceTests
         return new AppDbContext(options);
     }
 
-    private static AgentWorkflowService CreateService(AppDbContext db)
+    private static AgentWorkflowService CreateService(AppDbContext db, TimeProvider? clock = null)
     {
         var stateMachine = new AgentWorkflowStateMachine();
         var logger = NullLogger<AgentWorkflowService>.Instance;
-        return new AgentWorkflowService(db, stateMachine, logger);
+        return new AgentWorkflowService(db, stateMachine, logger, timeProvider: clock);
     }
 
     private static (Guid workflowId, Guid stepId, Guid managerId) SeedWorkflowWithStep(
@@ -36,7 +36,8 @@ public class AgentWorkflowApprovalServiceTests
         AgentWorkflowStatus status,
         WorkflowStepType stepType,
         string outputJson,
-        int version = 1)
+        int version = 1,
+        AgentWorkflowTriggerType trigger = AgentWorkflowTriggerType.ManualOperationalPlanning)
     {
         var managerId = Guid.NewGuid();
         db.Users.Add(new AppUser
@@ -54,6 +55,8 @@ public class AgentWorkflowApprovalServiceTests
             Id = Guid.NewGuid(),
             Objective = "Test workflow for approval gates",
             Status = status,
+            TriggerType = trigger,
+            TriggeringWasteReportId = trigger == AgentWorkflowTriggerType.CitizenReportSubmission ? Guid.NewGuid() : null,
             CurrentStep = stepType,
             InitiatedByUserId = managerId,
             Version = version,
@@ -81,6 +84,92 @@ public class AgentWorkflowApprovalServiceTests
     // =========================================================================
     // Gate 1: Collection Planning Approval
     // =========================================================================
+
+    private sealed class FixedTimeProvider(DateTimeOffset instant) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => instant;
+    }
+
+    private static string CanonicalC2Schedule(string scheduledAt) => JsonSerializer.Serialize(new
+    {
+        status = "completed",
+        isCompleteSnapshot = true,
+        candidateGroups = new[]
+        {
+            new
+            {
+                groupId = "group-1",
+                proposedSchedule = new { scheduledAt, schedulingReason = "Municipal collection review." },
+                needReferences = new[] { new { needId = Guid.NewGuid(), targetType = "Report", collectionReason = "VerifiedReport" } }
+            }
+        },
+        separateHandling = Array.Empty<object>(),
+        deferredNeeds = Array.Empty<object>()
+    });
+
+    [Theory]
+    [InlineData(AgentWorkflowTriggerType.ManualOperationalPlanning)]
+    [InlineData(AgentWorkflowTriggerType.CitizenReportSubmission)]
+    public async Task CollectionApproval_ValidMunicipalTime_PreservesExistingTransition(AgentWorkflowTriggerType trigger)
+    {
+        using var db = CreateContext(Guid.NewGuid().ToString("N"));
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 10, 5, 16, 30, 0, TimeSpan.Zero));
+        var sut = CreateService(db, clock);
+        var (workflowId, _, managerId) = SeedWorkflowWithStep(db,
+            AgentWorkflowStatus.AwaitingCollectionApproval, WorkflowStepType.CollectionPlanning,
+            CanonicalC2Schedule("2026-10-06T02:30:00Z"), trigger: trigger);
+
+        var result = await sut.ApproveCollectionPlanningAsync(workflowId,
+            new ApproveCollectionPlanningRequest { ExpectedVersion = 1 }, managerId);
+
+        result.Status.Should().Be(AgentWorkflowStatus.CollectionApproved);
+        result.Approvals.Should().ContainSingle();
+        (await db.CollectionTasks.CountAsync()).Should().Be(0, "approval precedes the existing materialization step");
+    }
+
+    [Theory]
+    [InlineData(AgentWorkflowTriggerType.ManualOperationalPlanning)]
+    [InlineData(AgentWorkflowTriggerType.CitizenReportSubmission)]
+    public async Task CollectionApproval_OutOfHoursPlan_LeavesWorkflowAwaitingApproval(AgentWorkflowTriggerType trigger)
+    {
+        using var db = CreateContext(Guid.NewGuid().ToString("N"));
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 10, 5, 16, 30, 0, TimeSpan.Zero));
+        var sut = CreateService(db, clock);
+        var (workflowId, _, managerId) = SeedWorkflowWithStep(db,
+            AgentWorkflowStatus.AwaitingCollectionApproval, WorkflowStepType.CollectionPlanning,
+            CanonicalC2Schedule("2026-10-05T21:00:00Z"), trigger: trigger); // 02:30 local
+
+        var act = () => sut.ApproveCollectionPlanningAsync(workflowId,
+            new ApproveCollectionPlanningRequest { ExpectedVersion = 1 }, managerId);
+        await act.Should().ThrowAsync<BusinessRuleConflictException>().WithMessage("*municipality timezone*");
+
+        var workflow = await db.AgentWorkflows.Include(w => w.Approvals).Include(w => w.Transitions)
+            .FirstAsync(w => w.Id == workflowId);
+        workflow.Status.Should().Be(AgentWorkflowStatus.AwaitingCollectionApproval);
+        workflow.Version.Should().Be(1);
+        workflow.Approvals.Should().BeEmpty();
+        workflow.Transitions.Should().BeEmpty();
+        (await db.CollectionTasks.CountAsync()).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task CollectionApproval_InvalidTimeStillAllowsRevisionAndRejection()
+    {
+        using var db = CreateContext(Guid.NewGuid().ToString("N"));
+        var sut = CreateService(db);
+        var invalid = CanonicalC2Schedule("2026-10-06T02:30:00+05:30"); // 02:30 local
+        var (reviseId, _, managerId) = SeedWorkflowWithStep(db,
+            AgentWorkflowStatus.AwaitingCollectionApproval, WorkflowStepType.CollectionPlanning, invalid);
+        var (rejectId, _, _) = SeedWorkflowWithStep(db,
+            AgentWorkflowStatus.AwaitingCollectionApproval, WorkflowStepType.CollectionPlanning, invalid);
+
+        (await sut.RequestCollectionRevisionAsync(reviseId,
+            new RequestCollectionRevisionRequest { ExpectedVersion = 1, Reason = "Collection time is outside operating hours." },
+            managerId)).Status.Should().Be(AgentWorkflowStatus.CollectionNeedsRevision);
+        (await sut.RejectCollectionPlanningAsync(rejectId,
+            new RejectCollectionPlanningRequest { ExpectedVersion = 1, Reason = "Collection time is invalid." },
+            managerId)).Status.Should().Be(AgentWorkflowStatus.Rejected);
+    }
 
     [Fact]
     public async Task ApproveCollectionPlanningAsync_ValidProposal_TransitionsAndPersistsApprovalAtomically()

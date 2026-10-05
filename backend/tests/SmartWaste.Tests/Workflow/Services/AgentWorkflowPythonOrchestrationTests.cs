@@ -24,6 +24,13 @@ namespace SmartWaste.Tests.Workflow.Services;
 
 public sealed class AgentWorkflowPythonOrchestrationTests
 {
+    private static DateTime NextValidUtc()
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo");
+        var localDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zone)).AddDays(2);
+        return TimeZoneInfo.ConvertTimeToUtc(localDate.ToDateTime(new TimeOnly(9, 0)), zone);
+    }
+
     private sealed class FakePythonOrchestrationClient : IPythonOrchestrationClient
     {
         private readonly Func<PythonWorkflowStartRequest, PythonOrchestrationEnvelope> _start;
@@ -461,7 +468,7 @@ public sealed class AgentWorkflowPythonOrchestrationTests
             ApprovalStage = "CollectionPlanning",
             PlannerResult = Json("{\"objective\":\"shared planning\"}"),
             WasteAnalysisResult = Json("{\"objective\":\"waste analysis\"}"),
-            CollectionPlanningResult = Json(CollectionPlanJson(reportId, DateTime.UtcNow.AddHours(3))),
+            CollectionPlanningResult = Json(CollectionPlanJson(reportId, NextValidUtc())),
             CompletedSpecialists = ["WasteAnalysis", "CollectionPlanning"]
         };
     }

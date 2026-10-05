@@ -34,6 +34,12 @@ Copy `.env.example` to `.env` if local overrides are needed:
 Copy-Item .env.example .env
 ```
 
+C2 uses `MUNICIPAL_TIMEZONE=Asia/Colombo` and permits collection start times
+from `COLLECTION_WINDOW_START=08:00` inclusive to `COLLECTION_WINDOW_END=16:00`
+exclusive in municipality local time. At or after closing, the earliest start
+is 08:00 the next local calendar day. The advisory `scheduledAt` field stays
+an offset-aware UTC timestamp. Invalid timezone or window settings fail fast.
+
 ### 4. Run Development Server
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
