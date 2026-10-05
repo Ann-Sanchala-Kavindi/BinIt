@@ -14,13 +14,24 @@ import '../../reporting/models/waste_report_status.dart';
 import '../../reporting/models/waste_type.dart';
 
 /// Authenticated Citizen Dashboard — the primary landing screen for Citizen mobile users.
-class CitizenDashboardScreen extends ConsumerWidget {
+class CitizenDashboardScreen extends ConsumerStatefulWidget {
   final ReportingRepository? repository;
 
   const CitizenDashboardScreen({super.key, this.repository});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CitizenDashboardScreen> createState() => _CitizenDashboardScreenState();
+}
+
+class _CitizenDashboardScreenState extends ConsumerState<CitizenDashboardScreen> {
+  final _recentActivityKey = GlobalKey<_RecentActivitySectionState>();
+
+  Future<void> _refreshDashboard() async {
+    await _recentActivityKey.currentState?._fetchRecentReports(isRefresh: true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final user = authState.user;
 
@@ -29,7 +40,11 @@ class CitizenDashboardScreen extends ConsumerWidget {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 540),
-        child: SingleChildScrollView(
+        child: RefreshIndicator(
+          key: const Key('citizen_dashboard_refresh_indicator'),
+          onRefresh: _refreshDashboard,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.lg,
             vertical: AppSpacing.md,
@@ -85,9 +100,13 @@ class CitizenDashboardScreen extends ConsumerWidget {
                     ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              _RecentActivitySection(repository: repository),
+              _RecentActivitySection(
+                key: _recentActivityKey,
+                repository: widget.repository,
+              ),
               const SizedBox(height: AppSpacing.lg),
             ],
+          ),
           ),
         ),
       ),
@@ -313,15 +332,6 @@ class _QuickAccessGrid extends StatelessWidget {
         },
       ),
       _QuickAccessCard(
-        key: const Key('citizen_quick_access_notifications'),
-        title: 'Notifications',
-        description: 'View report and service updates.',
-        icon: Icons.notifications_outlined,
-        onTap: () {
-          context.push('/citizen/notifications');
-        },
-      ),
-      _QuickAccessCard(
         key: const Key('citizen_quick_access_profile'),
         title: 'Profile',
         description: 'Manage your account information.',
@@ -450,7 +460,7 @@ class _QuickAccessCard extends StatelessWidget {
 class _RecentActivitySection extends ConsumerStatefulWidget {
   final ReportingRepository? repository;
 
-  const _RecentActivitySection({this.repository});
+  const _RecentActivitySection({super.key, this.repository});
 
   @override
   ConsumerState<_RecentActivitySection> createState() => _RecentActivitySectionState();
@@ -458,6 +468,7 @@ class _RecentActivitySection extends ConsumerStatefulWidget {
 
 class _RecentActivitySectionState extends ConsumerState<_RecentActivitySection> {
   bool _isLoading = true;
+  bool _hasLoadedData = false;
   String? _errorMessage;
   List<WasteReportListItemModel> _recentReports = [];
 
@@ -467,12 +478,14 @@ class _RecentActivitySectionState extends ConsumerState<_RecentActivitySection> 
     _fetchRecentReports();
   }
 
-  Future<void> _fetchRecentReports() async {
+  Future<void> _fetchRecentReports({bool isRefresh = false}) async {
     if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+    if (!isRefresh || !_hasLoadedData) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
 
     try {
       final ReportingRepository repository = widget.repository ?? ref.read(reportingRepositoryProvider);
@@ -486,15 +499,24 @@ class _RecentActivitySectionState extends ConsumerState<_RecentActivitySection> 
       if (mounted) {
         setState(() {
           _recentReports = response.items.take(3).toList();
+          _hasLoadedData = true;
+          _errorMessage = null;
           _isLoading = false;
         });
       }
     } catch (_) {
       if (mounted) {
         setState(() {
-          _errorMessage = "Couldn't load recent activity.";
+          if (!_hasLoadedData) {
+            _errorMessage = "Couldn't load recent activity.";
+          }
           _isLoading = false;
         });
+        if (isRefresh && _hasLoadedData) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Couldn't load recent activity.")),
+          );
+        }
       }
     }
   }

@@ -24,6 +24,8 @@ vi.mock('./CollectionStopsMap', () => ({
 const mockAssignmentsList: AssignmentSummaryDto[] = [
   {
     id: 'assignment-1',
+    assignmentNumber: 1,
+    assignmentReference: 'Assignment 001',
     status: 'Assigned',
     driverId: 'driver-1',
     driverName: 'Kasun Fernando',
@@ -36,6 +38,8 @@ const mockAssignmentsList: AssignmentSummaryDto[] = [
   },
   {
     id: 'assignment-2',
+    assignmentNumber: 2,
+    assignmentReference: 'Assignment 002',
     status: 'Completed',
     driverId: 'driver-2',
     driverName: 'Nimal Perera',
@@ -95,6 +99,8 @@ describe('AssignmentsSection', () => {
       isError: false,
       data: {
         id: 'assignment-1',
+        assignmentNumber: 1,
+        assignmentReference: 'Assignment 001',
         driverId: 'driver-1',
         driverName: 'Kasun Fernando',
         vehicleId: 'vehicle-1',
@@ -121,12 +127,15 @@ describe('AssignmentsSection', () => {
     render(<AssignmentsSection role="WasteOfficer" />);
 
     expect(screen.getByText('WP-C34-1001')).toBeInTheDocument();
+    expect(screen.getByText('Assignment 001')).toBeInTheDocument();
+    expect(screen.queryByText('assignment-1')).not.toBeInTheDocument();
 
     const viewDetailsButtons = screen.getAllByRole('button', { name: /view details/i });
     await user.click(viewDetailsButtons[0]);
 
     // Detail panel should be visible
     expect(screen.getByTestId('assignment-detail-panel')).toBeInTheDocument();
+    expect(hooks.useAssignmentDetail).toHaveBeenCalledWith('assignment-1');
     expect(screen.getByRole('button', { name: /back to assignments/i })).toBeInTheDocument();
 
     // Clicking back returns to the table
@@ -135,9 +144,10 @@ describe('AssignmentsSection', () => {
   });
 
   it('renders created assignment banner when createdAssignmentId is passed', () => {
-    render(<AssignmentsSection role="WasteOfficer" createdAssignmentId="assignment-new-99" />);
+    render(<AssignmentsSection role="WasteOfficer" createdAssignmentId="assignment-new-99" createdAssignmentReference="Assignment 099" />);
 
     expect(screen.getByText(/assignment created/i)).toBeInTheDocument();
-    expect(screen.getByText('assignment-new-99')).toBeInTheDocument();
+    expect(screen.getByText(/assignment 099 is now listed/i)).toBeInTheDocument();
+    expect(screen.queryByText('assignment-new-99')).not.toBeInTheDocument();
   });
 });

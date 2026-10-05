@@ -41,6 +41,7 @@ export const DispatchRoutesPage: React.FC = () => {
   const [tasksPage, setTasksPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [createdAssignmentId, setCreatedAssignmentId] = useState<string | null>(null);
+  const [createdAssignmentReference, setCreatedAssignmentReference] = useState<string | null>(null);
   const tasks = useAvailableAssignmentTasks({ page: tasksPage, pageSize });
   const taskList = tasks.data;
 
@@ -64,6 +65,7 @@ export const DispatchRoutesPage: React.FC = () => {
               className="self-start sm:self-auto"
               onClick={() => {
                 setCreatedAssignmentId(null);
+                setCreatedAssignmentReference(null);
                 setCreating(true);
               }}
             >
@@ -76,8 +78,9 @@ export const DispatchRoutesPage: React.FC = () => {
       {creating && (
         <CreateAssignmentPanel
           onCancel={() => setCreating(false)}
-          onCreated={(assignmentId) => {
+          onCreated={(assignmentId, assignmentReference) => {
             setCreatedAssignmentId(assignmentId);
+            setCreatedAssignmentReference(assignmentReference ?? null);
             setSection('assignments');
             setCreating(false);
           }}
@@ -197,7 +200,7 @@ export const DispatchRoutesPage: React.FC = () => {
       )}
 
       {!creating && section === 'assignments' && (
-        <AssignmentsSection role="WasteOfficer" createdAssignmentId={createdAssignmentId} />
+        <AssignmentsSection role="WasteOfficer" createdAssignmentId={createdAssignmentId} createdAssignmentReference={createdAssignmentReference} />
       )}
     </div>
   );

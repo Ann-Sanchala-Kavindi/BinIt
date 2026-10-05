@@ -1,7 +1,9 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../../store/authStore';
+import { dashboardApi } from '../api/dashboardApi';
 import { OverviewCard } from '../components/OverviewCard';
-import { NeedsAttentionSection } from '../components/NeedsAttentionSection';
+import { OfficerNeedsAttentionQueue } from '../components/OfficerNeedsAttentionQueue';
 import { QuickActions } from '../components/QuickActions';
 import {
   ReportsIcon,
@@ -14,6 +16,19 @@ import {
 
 export const OfficerDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
+  const overviewQuery = useQuery({
+    queryKey: ['waste-officer-dashboard', 'overview'],
+    queryFn: dashboardApi.getOverview,
+    staleTime: 30_000,
+    refetchOnMount: 'always',
+  });
+  const overview = overviewQuery.isError ? undefined : overviewQuery.data;
+  const needsAttentionQuery = useQuery({
+    queryKey: ['waste-officer-dashboard', 'needs-attention'],
+    queryFn: dashboardApi.getNeedsAttention,
+    staleTime: 30_000,
+    refetchOnMount: 'always',
+  });
 
   const currentFormattedDate = new Intl.DateTimeFormat('en-GB', {
     weekday: 'long',
@@ -61,7 +76,7 @@ export const OfficerDashboardPage: React.FC = () => {
       </div>
 
       {/* Operational Overview KPI Cards */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5">
+      <div>
         <div className="mb-4">
           <h2 className="text-xs font-bold text-slate-900 tracking-wider uppercase">
             Operational Overview
@@ -71,39 +86,48 @@ export const OfficerDashboardPage: React.FC = () => {
           </p>
         </div>
 
+        {overviewQuery.isError && (
+          <div role="alert" className="mb-4 flex items-center gap-3 text-sm text-rose-700">
+            <span>Unable to load operational overview.</span>
+            <button type="button" className="font-semibold underline" onClick={() => void overviewQuery.refetch()}>
+              Retry
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
           <OverviewCard
             label="Reports Awaiting Review"
-            value="—"
+            value={overview?.reportsAwaitingReview ?? '—'}
             description="Pending field verification"
             icon={<ReportsIcon />}
-            variant="amber"
+            variant="mint"
             to="/officer/waste-reports"
           />
           <OverviewCard
             label="Active Bins"
-            value="—"
+            value={overview?.activeBins ?? '—'}
             description="Monitored collection points"
             icon={<BinsIcon />}
             variant="emerald"
           />
           <OverviewCard
             label="Scheduled Collections"
-            value="—"
+            value={overview?.scheduledCollections ?? '—'}
             description="Active route schedules"
             icon={<SchedulesIcon />}
             variant="blue"
           />
           <OverviewCard
             label="Open Collection Tasks"
-            value="—"
+            value={overview?.openCollectionTasks ?? '—'}
             description="Assigned & in-progress"
             icon={<TasksIcon />}
             variant="mint"
           />
           <OverviewCard
             label="Open Complaints"
-            value="—"
+            value={overview?.openComplaints ?? '—'}
             description="Citizen service inquiries"
             icon={<ComplaintsIcon />}
             variant="rose"
@@ -115,7 +139,12 @@ export const OfficerDashboardPage: React.FC = () => {
       <QuickActions />
 
       {/* Needs Attention Section */}
-      <NeedsAttentionSection />
+      <OfficerNeedsAttentionQueue
+        items={needsAttentionQuery.data}
+        isLoading={needsAttentionQuery.isLoading}
+        isError={needsAttentionQuery.isError}
+        onRetry={() => void needsAttentionQuery.refetch()}
+      />
     </div>
   );
 };

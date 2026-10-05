@@ -434,6 +434,22 @@ void main() {
   });
 
   group('DriverAssignmentScreen Responsive Viewport Tests', () {
+    testWidgets('empty assignment stays below its header without a large gap', (tester) async {
+      tester.view.physicalSize = const Size(390 * 3.0, 844 * 3.0);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = MockDriverRepository(currentAssignment: null);
+      await tester.pumpWidget(createAssignmentScreenApp(repository: repo));
+      await tester.pumpAndSettle();
+
+      final headerBottom = tester.getBottomLeft(find.byType(AppBar)).dy;
+      final cardTop = tester.getTopLeft(find.byKey(const Key('driver_assignment_empty_state'))).dy;
+      expect(cardTop - headerBottom, inInclusiveRange(16, 48));
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets(
       '11. Renders cleanly without overflow on narrow 320px viewport',
       (tester) async {

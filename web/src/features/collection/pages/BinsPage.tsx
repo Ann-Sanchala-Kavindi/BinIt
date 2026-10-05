@@ -27,7 +27,7 @@ export const BinsPage: React.FC = () => {
     </div>
     <BinFilterBar filters={filters} onFilterChange={onFilterChange} onClearFilters={clearFilters} isFetching={isFetching && !isLoading} />
     {isError && <Alert variant="error" className="flex items-center justify-between gap-4"><div><p className="font-semibold text-sm">Failed to load bins</p><p className="text-xs text-red-700 mt-0.5">{errorMessage}</p></div><Button variant="secondary" size="sm" onClick={() => refetch()} className="shrink-0 text-xs border-red-200 text-red-800 hover:bg-red-100">Retry</Button></Alert>}
-    <Card className="p-0 overflow-hidden shadow-2xs border-slate-200/80"><BinsTable bins={bins} isLoading={isLoading} isFiltered={isFiltered} onClearFilters={clearFilters} />{!isLoading && !isError && <BinPagination currentPage={currentPage} totalPages={totalPages} totalCount={totalCount} pageSize={pageSize} onPageChange={setPage} isLoading={isFetching} />}</Card>
+    <Card className="p-0! overflow-hidden shadow-2xs border-slate-200/80"><BinsTable bins={bins} isLoading={isLoading} isFiltered={isFiltered} onClearFilters={clearFilters} />{!isLoading && !isError && <BinPagination currentPage={currentPage} totalPages={totalPages} totalCount={totalCount} pageSize={pageSize} onPageChange={setPage} isLoading={isFetching} />}</Card>
   </div>;
 };
 

@@ -16,7 +16,7 @@ describe('BinsPage', () => {
     expect(await screen.findByText('BIN-COL-0042')).toBeInTheDocument();
     expect(screen.getByText('Main Street, Pettah')).toBeInTheDocument();
     expect(screen.getByText('No observation')).toBeInTheDocument();
-    expect(screen.getByText(/No observation recorded/)).toBeInTheDocument();
+    expect(screen.queryByText(/Latest: No observation recorded/)).not.toBeInTheDocument();
   });
 
   it('shows retryable failure state', async () => {

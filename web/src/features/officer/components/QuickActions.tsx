@@ -28,27 +28,27 @@ const quickActionVariants: Record<
   { card: string; iconContainer: string; arrow: string }
 > = {
   amber: {
-    card: 'bg-[#FEF9F1] border-[#FDE68A] hover:border-amber-300 hover:bg-[#FEF6E9]',
+    card: 'bg-amber-100/30 border-amber-300 hover:border-amber-400 hover:bg-amber-200/80',
     iconContainer: 'bg-[#FEF3C7] border-amber-200/80 text-[#D97706]',
     arrow: 'text-[#D97706] group-hover:text-amber-700',
   },
   emerald: {
-    card: 'bg-[#ECFDF5] border-[#A7F3D0] hover:border-emerald-300 hover:bg-[#E6FAF0]',
+    card: 'bg-emerald-100/30 border-emerald-300 hover:border-emerald-400 hover:bg-emerald-200/80',
     iconContainer: 'bg-[#D1FAE5] border-emerald-200/80 text-[#059669]',
     arrow: 'text-[#059669] group-hover:text-emerald-700',
   },
   blue: {
-    card: 'bg-[#EDF6FE] border-[#BAE6FD] hover:border-blue-300 hover:bg-[#E4F0FD]',
+    card: 'bg-sky-100/30 border-sky-300 hover:border-sky-400 hover:bg-sky-200/80',
     iconContainer: 'bg-[#DBEAFE] border-blue-200/80 text-[#2563EB]',
     arrow: 'text-[#2563EB] group-hover:text-blue-700',
   },
   mint: {
-    card: 'bg-[#F1FDF7] border-[#A7F3D0] hover:border-emerald-300 hover:bg-[#E6F9F0]',
+    card: 'bg-teal-100/30 border-teal-300 hover:border-teal-400 hover:bg-teal-200/80',
     iconContainer: 'bg-[#D1FAE5] border-emerald-200/80 text-[#10B981]',
     arrow: 'text-[#10B981] group-hover:text-emerald-700',
   },
   rose: {
-    card: 'bg-[#FEF2F5] border-[#FECDD3] hover:border-rose-300 hover:bg-[#FDE8ED]',
+    card: 'bg-rose-100/30 border-rose-300 hover:border-rose-400 hover:bg-rose-200/80',
     iconContainer: 'bg-[#FFE4E6] border-rose-200/80 text-[#E11D48]',
     arrow: 'text-[#E11D48] group-hover:text-rose-700',
   },
@@ -61,7 +61,7 @@ const defaultActions: ActionItem[] = [
     label: 'Review Waste Reports',
     to: '/officer/waste-reports',
     icon: <ReportsIcon className="w-4 h-4" />,
-    variant: 'amber',
+    variant: 'mint',
   },
   {
     label: 'Manage Bins',
@@ -95,7 +95,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
   actions = defaultActions,
 }) => {
   return (
-    <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5">
+    <div>
       <div className="mb-4">
         <h2 className="text-xs font-bold text-slate-900 tracking-wider uppercase">
           {title}
@@ -116,7 +116,7 @@ export const QuickActions: React.FC<QuickActionsProps> = ({
             <Link
               key={act.to}
               to={act.to}
-              className={`group flex items-center justify-between p-3 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-2xs ${styles.card}`}
+              className={`group flex items-center justify-between p-3 rounded-xl border transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm hover:shadow-md ${styles.card}`}
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <div

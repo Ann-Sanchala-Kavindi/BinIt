@@ -7,6 +7,7 @@ export interface NeedsAttentionSectionProps {
   subtitle?: string;
   emptyTitle?: string;
   emptyDescription?: string;
+  children?: React.ReactNode;
 }
 
 export const NeedsAttentionSection: React.FC<NeedsAttentionSectionProps> = ({
@@ -15,6 +16,7 @@ export const NeedsAttentionSection: React.FC<NeedsAttentionSectionProps> = ({
   subtitle = 'Items requiring immediate officer review or operational intervention',
   emptyTitle = 'All Operational Queues Clear',
   emptyDescription = 'No live operational data is available yet. Waste reports and other operational items will appear here once the corresponding modules are connected.',
+  children,
 }) => {
   return (
     <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5 sm:p-6">
@@ -38,8 +40,7 @@ export const NeedsAttentionSection: React.FC<NeedsAttentionSectionProps> = ({
         </span>
       </div>
 
-      {/* Professional operational empty state */}
-      <div className="py-10 px-4 text-center rounded-xl bg-slate-50/60 border border-dashed border-slate-200">
+      {children ?? <div className="py-10 px-4 text-center rounded-xl bg-slate-50/60 border border-dashed border-slate-200">
         <div
           className="w-11 h-11 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-600 mx-auto flex items-center justify-center mb-3 shadow-2xs"
           aria-hidden="true"
@@ -52,7 +53,7 @@ export const NeedsAttentionSection: React.FC<NeedsAttentionSectionProps> = ({
         <p className="text-xs text-slate-500 max-w-md mx-auto mt-1.5 leading-relaxed">
           {emptyDescription}
         </p>
-      </div>
+      </div>}
     </div>
   );
 };

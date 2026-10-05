@@ -30,12 +30,12 @@ describe('DispatchRoutesPage', () => {
     });
     hooks.useAssignments.mockReturnValue({
       isLoading: false, isError: false, isFetching: false, refetch: vi.fn(),
-      data: { items: [{ id: 'assignment-1', status: 'Assigned', driverId: 'driver-1', driverName: 'Kasun Fernando', vehicleId: 'vehicle-1', vehicleRegistrationNumber: 'WP-C34-1001', stopCount: 2, completedStopCount: 0, failedStopCount: 0, assignedAt: '2026-09-25T05:30:00Z' }], page: 1, pageSize: 20, totalCount: 1, totalPages: 1 },
+      data: { items: [{ id: 'assignment-1', assignmentNumber: 1, assignmentReference: 'Assignment 001', status: 'Assigned', driverId: 'driver-1', driverName: 'Kasun Fernando', vehicleId: 'vehicle-1', vehicleRegistrationNumber: 'WP-C34-1001', stopCount: 2, completedStopCount: 0, failedStopCount: 0, assignedAt: '2026-09-25T05:30:00Z' }], page: 1, pageSize: 20, totalCount: 1, totalPages: 1 },
     });
     hooks.useAssignmentDetail.mockReturnValue({
       isLoading: false, isError: false, isFetching: false, refetch: vi.fn(),
       data: {
-        id: 'assignment-1', status: 'Assigned', driverId: 'driver-1', driverName: 'Kasun Fernando', vehicleId: 'vehicle-1', vehicleRegistrationNumber: 'WP-C34-1001', stopCount: 2, completedStopCount: 0, failedStopCount: 0, assignedAt: '2026-09-25T05:30:00Z',
+        id: 'assignment-1', assignmentNumber: 1, assignmentReference: 'Assignment 001', status: 'Assigned', driverId: 'driver-1', driverName: 'Kasun Fernando', vehicleId: 'vehicle-1', vehicleRegistrationNumber: 'WP-C34-1001', stopCount: 2, completedStopCount: 0, failedStopCount: 0, assignedAt: '2026-09-25T05:30:00Z',
         route: { id: 'route-1', assignmentId: 'assignment-1', routingMethod: 'ManualOrdered', stops: [] },
         history: [],
       },
@@ -53,7 +53,8 @@ describe('DispatchRoutesPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Assignments' }));
 
-    expect(screen.getByText('assignment-1')).toBeInTheDocument();
+    expect(screen.getByText('Assignment 001')).toBeInTheDocument();
+    expect(screen.queryByText('assignment-1')).not.toBeInTheDocument();
     expect(screen.getByText('Kasun Fernando')).toBeInTheDocument();
     expect(screen.getAllByText('Assigned').length).toBeGreaterThanOrEqual(1);
   });

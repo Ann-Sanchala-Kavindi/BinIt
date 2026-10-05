@@ -20,6 +20,7 @@ class DriverStopCard extends StatelessWidget {
   final bool isExecuting;
 
   static final DateFormat _dateFormat = DateFormat('d MMM yyyy • h:mm a');
+  static const double _stopActionHeight = 48;
 
   const DriverStopCard({
     super.key,
@@ -351,28 +352,26 @@ class DriverStopCard extends StatelessWidget {
           if (stop.status.isPending &&
               (onComplete != null || onFail != null)) ...[
             const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.xs,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (onFail != null)
                   AppButton.destructive(
                     key: Key('driver_stop_fail_${stop.sequence}'),
                     label: 'Fail stop',
                     icon: Icons.report_problem_outlined,
-                    isFullWidth: false,
-                    height: 40,
+                    height: _stopActionHeight,
                     isLoading: isExecuting,
                     onPressed: isExecuting ? null : onFail,
                   ),
+                if (onFail != null && onComplete != null)
+                  const SizedBox(height: AppSpacing.sm),
                 if (onComplete != null)
                   AppButton.primary(
                     key: Key('driver_stop_complete_${stop.sequence}'),
                     label: 'Complete stop',
                     icon: Icons.check_circle_outline,
-                    isFullWidth: false,
-                    height: 40,
+                    height: _stopActionHeight,
                     isLoading: isExecuting,
                     onPressed: isExecuting ? null : onComplete,
                   ),

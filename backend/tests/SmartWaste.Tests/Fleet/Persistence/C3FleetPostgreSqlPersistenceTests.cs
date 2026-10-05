@@ -296,6 +296,8 @@ public class C3FleetPostgreSqlPersistenceTests
                 Stops = new[] { new CreateRouteStopRequest { CollectionTaskId = binTask.Id, Sequence = 1 }, new CreateRouteStopRequest { CollectionTaskId = reportTask.Id, Sequence = 2 } }
             }, officer.Id, AppRoles.WasteOfficer);
             assignmentId = result.Id;
+            result.AssignmentNumber.Should().BePositive();
+            result.AssignmentReference.Should().Be($"Assignment {result.AssignmentNumber:D3}");
             (await db.CollectionAssignments.CountAsync(x => x.Id == assignmentId)).Should().Be(1);
             (await db.CollectionAssignmentTaskClaims.CountAsync(x => x.CollectionAssignmentId == assignmentId && x.IsActive)).Should().Be(2);
             var route = await db.Routes.Include(x => x.Stops).SingleAsync(x => x.CollectionAssignmentId == assignmentId);
@@ -355,12 +357,15 @@ public class C3FleetPostgreSqlPersistenceTests
             (await db.WasteBins.SingleAsync(x => x.Id == bin.Id)).LastCollectedAt.Should().BeNull();
             (await db.BinObservations.CountAsync(x => x.WasteBinId == bin.Id)).Should().Be(0);
 
-            var reassignment = await new CollectionAssignmentService(db, manager.Object).CreateAsync(new CreateCollectionAssignmentRequest
+            var reassignment = await new CollectionAssignmentService(db, manager.Object).CreateAssignmentFromApprovedPlanAsync(new CreateCollectionAssignmentRequest
             {
                 DriverId = driverUser.Id, VehicleId = vehicle.Id, CollectionTaskIds = new[] { reportTask.Id, binTask.Id },
                 Stops = new[] { new CreateRouteStopRequest { CollectionTaskId = reportTask.Id, Sequence = 1 }, new CreateRouteStopRequest { CollectionTaskId = binTask.Id, Sequence = 2 } }
-            }, officer.Id, AppRoles.WasteOfficer);
+            }, officer.Id);
             reassignmentId = reassignment.Id;
+            reassignment.AssignmentNumber.Should().BePositive();
+            reassignment.AssignmentNumber.Should().NotBe(result.AssignmentNumber);
+            reassignment.AssignmentReference.Should().Be($"Assignment {reassignment.AssignmentNumber:D3}");
             (await db.CollectionAssignmentTaskClaims.Where(x => x.CollectionTaskId == reportTask.Id || x.CollectionTaskId == binTask.Id).ToListAsync()).Count(x => x.IsActive).Should().Be(2);
             var started = await new CollectionAssignmentService(db, manager.Object).StartAsync(reassignmentId, driverUser.Id, AppRoles.Driver);
             started.Status.Should().Be(CollectionAssignmentStatus.InProgress);

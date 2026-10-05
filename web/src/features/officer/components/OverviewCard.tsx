@@ -19,32 +19,32 @@ const variantStyles: Record<
   { card: string; iconContainer: string; iconText: string }
 > = {
   amber: {
-    card: 'bg-[#FEF9F1] border-[#FDE68A] hover:border-amber-300 hover:bg-[#FEF6E9]',
+    card: 'bg-amber-100/30 border-amber-300 hover:border-amber-400 hover:bg-amber-200/80',
     iconContainer: 'bg-[#FEF3C7] border-amber-200/80',
     iconText: 'text-[#D97706]',
   },
   emerald: {
-    card: 'bg-[#ECFDF5] border-[#A7F3D0] hover:border-emerald-300 hover:bg-[#E6FAF0]',
+    card: 'bg-emerald-100/30 border-emerald-300 hover:border-emerald-400 hover:bg-emerald-200/80',
     iconContainer: 'bg-[#D1FAE5] border-emerald-200/80',
     iconText: 'text-[#059669]',
   },
   blue: {
-    card: 'bg-[#EDF6FE] border-[#BAE6FD] hover:border-blue-300 hover:bg-[#E4F0FD]',
+    card: 'bg-sky-100/30 border-sky-300 hover:border-sky-400 hover:bg-sky-200/80',
     iconContainer: 'bg-[#DBEAFE] border-blue-200/80',
     iconText: 'text-[#2563EB]',
   },
   mint: {
-    card: 'bg-[#F1FDF7] border-[#A7F3D0] hover:border-emerald-300 hover:bg-[#E6F9F0]',
+    card: 'bg-teal-100/30 border-teal-300 hover:border-teal-400 hover:bg-teal-200/80',
     iconContainer: 'bg-[#D1FAE5] border-emerald-200/80',
     iconText: 'text-[#10B981]',
   },
   rose: {
-    card: 'bg-[#FEF2F5] border-[#FECDD3] hover:border-rose-300 hover:bg-[#FDE8ED]',
+    card: 'bg-rose-100/30 border-rose-300 hover:border-rose-400 hover:bg-rose-200/80',
     iconContainer: 'bg-[#FFE4E6] border-rose-200/80',
     iconText: 'text-[#E11D48]',
   },
   slate: {
-    card: 'bg-white border-slate-200 hover:border-slate-300',
+    card: 'bg-slate-100/30 border-slate-300 hover:border-slate-400 hover:bg-slate-200/80',
     iconContainer: 'bg-slate-100 border-slate-200',
     iconText: 'text-slate-700',
   },
@@ -95,7 +95,7 @@ export const OverviewCard: React.FC<OverviewCardProps> = ({
     return (
       <Link
         to={to}
-        className={`rounded-xl border shadow-2xs p-4 flex items-start gap-3.5 transition-all block text-left ${resolvedCardStyle}`}
+        className={`rounded-xl border shadow-sm hover:shadow-md p-4 flex items-start gap-3.5 transition-all block text-left ${resolvedCardStyle}`}
       >
         {content}
       </Link>
@@ -104,7 +104,7 @@ export const OverviewCard: React.FC<OverviewCardProps> = ({
 
   return (
     <div
-      className={`rounded-xl border shadow-2xs p-4 flex items-start gap-3.5 transition-all ${resolvedCardStyle}`}
+      className={`rounded-xl border shadow-sm p-4 flex items-start gap-3.5 transition-all ${resolvedCardStyle}`}
     >
       {content}
     </div>

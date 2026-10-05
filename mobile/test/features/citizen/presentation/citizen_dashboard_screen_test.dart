@@ -13,6 +13,7 @@ import 'package:mobile/features/auth/presentation/change_password_screen.dart';
 import 'package:mobile/features/auth/presentation/login_screen.dart';
 import 'package:mobile/features/auth/providers/auth_provider.dart';
 import 'package:mobile/features/citizen/presentation/citizen_dashboard_screen.dart';
+import 'package:mobile/features/citizen/presentation/citizen_profile_screen.dart';
 import 'package:mobile/features/reporting/data/reporting_repository.dart';
 import 'package:mobile/features/reporting/models/paged_waste_reports_model.dart';
 import 'package:mobile/features/reporting/models/waste_report_list_item_model.dart';
@@ -26,6 +27,7 @@ import 'package:mobile/features/reporting/presentation/report_waste_screen.dart'
 import 'package:mobile/features/complaints/data/complaints_repository.dart';
 import 'package:mobile/features/complaints/models/complaint_model.dart';
 import 'package:mobile/features/complaints/presentation/citizen_complaints_screen.dart';
+import 'package:mobile/shared/widgets/app_card.dart';
 
 class MockReportingRepository extends ReportingRepository {
   List<WasteReportListItemModel> reportsToReturn = [];
@@ -245,7 +247,8 @@ void main() {
       expect(find.text('Help keep your community clean and healthy.'), findsOneWidget);
 
       // Top action buttons
-      expect(find.byKey(const Key('citizen_notification_button')), findsOneWidget);
+      expect(find.byKey(const Key('citizen_notification_button')), findsNothing);
+      expect(find.byTooltip('Notifications'), findsNothing);
       expect(find.byKey(const Key('citizen_account_button')), findsOneWidget);
     });
 
@@ -261,7 +264,7 @@ void main() {
       expect(find.byKey(const Key('citizen_report_waste_illustration')), findsOneWidget);
     });
 
-    testWidgets('renders 5 Quick Access items and Recent Activity empty state', (tester) async {
+    testWidgets('renders 4 Quick Access items and Recent Activity empty state', (tester) async {
       await tester.pumpWidget(createCitizenTestApp());
       await tester.pumpAndSettle();
 
@@ -272,7 +275,7 @@ void main() {
       expect(find.text('Nearby Bins'), findsOneWidget);
       expect(find.text('Find waste bins near your location.'), findsOneWidget);
       expect(find.byKey(const Key('citizen_quick_access_complaints')), findsOneWidget);
-      expect(find.byKey(const Key('citizen_quick_access_notifications')), findsOneWidget);
+      expect(find.byKey(const Key('citizen_quick_access_notifications')), findsNothing);
       expect(find.byKey(const Key('citizen_quick_access_profile')), findsOneWidget);
 
       // Recent Activity section
@@ -338,6 +341,25 @@ void main() {
       expect(find.byType(CitizenDashboardScreen), findsOneWidget);
     });
 
+    testWidgets('My Reports and Complaints quick access cards keep their routes', (tester) async {
+      await tester.pumpWidget(createCitizenTestApp());
+      await tester.pumpAndSettle();
+
+      final reportsCard = find.byKey(const Key('citizen_quick_access_reports'));
+      await tester.ensureVisible(reportsCard);
+      await tester.tap(reportsCard);
+      await tester.pumpAndSettle();
+      expect(find.byType(MyReportsScreen), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('citizen_bottom_nav_home')));
+      await tester.pumpAndSettle();
+      final complaintsCard = find.byKey(const Key('citizen_quick_access_complaints'));
+      await tester.ensureVisible(complaintsCard);
+      await tester.tap(complaintsCard);
+      await tester.pumpAndSettle();
+      expect(find.byType(CitizenComplaintsScreen), findsOneWidget);
+    });
+
     testWidgets('tapping bottom nav items switches tabs seamlessly', (tester) async {
       await tester.pumpWidget(createCitizenTestApp());
       await tester.pumpAndSettle();
@@ -356,7 +378,7 @@ void main() {
       // Tap Profile
       await tester.tap(find.byKey(const Key('citizen_bottom_nav_profile')));
       await tester.pumpAndSettle();
-      expect(find.text('Manage your personal account and contact information.'), findsOneWidget);
+      expect(find.byType(CitizenProfileScreen), findsOneWidget);
 
       // Tap Home
       await tester.tap(find.byKey(const Key('citizen_bottom_nav_home')));
@@ -396,7 +418,7 @@ void main() {
       // Tap Profile
       await tester.tap(find.byKey(const Key('citizen_bottom_nav_profile')));
       await tester.pumpAndSettle();
-      expect(find.text('Manage your personal account and contact information.'), findsOneWidget);
+      expect(find.byType(CitizenProfileScreen), findsOneWidget);
 
       // Trigger system back button
       await tester.binding.handlePopRoute();
@@ -406,46 +428,78 @@ void main() {
       expect(find.byType(CitizenDashboardScreen), findsOneWidget);
     });
 
-    testWidgets('tapping top notifications button navigates to notifications screen', (tester) async {
+    testWidgets('Profile quick access opens the Citizen Profile screen', (tester) async {
       await tester.pumpWidget(createCitizenTestApp());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('citizen_notification_button')));
+      final profileCard = find.byKey(const Key('citizen_quick_access_profile'));
+      await tester.ensureVisible(profileCard);
+      await tester.tap(profileCard);
       await tester.pumpAndSettle();
 
-      expect(find.text('Status updates and municipal alerts will be available here.'), findsOneWidget);
+      expect(find.byType(CitizenProfileScreen), findsOneWidget);
+      await tester.tap(find.byKey(const Key('citizen_profile_back_button')));
+      await tester.pumpAndSettle();
+      expect(find.byType(CitizenDashboardScreen), findsOneWidget);
     });
   });
 
-  group('Citizen Account Actions Tests', () {
-    testWidgets('opens account bottom sheet and displays citizen details', (tester) async {
+  group('Citizen Profile Actions Tests', () {
+    testWidgets('profile content stays directly below the shared header', (tester) async {
+      tester.view.physicalSize = const Size(390 * 3.0, 844 * 3.0);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(createCitizenTestApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('citizen_account_button')));
+      await tester.pumpAndSettle();
+
+      final headerBottom = tester.getBottomLeft(find.byType(AppBar)).dy;
+      final profileCard = find.descendant(
+        of: find.byType(CitizenProfileScreen),
+        matching: find.byType(AppCard),
+      );
+      final gap = tester.getTopLeft(profileCard).dy - headerBottom;
+      expect(gap, inInclusiveRange(16, 48));
+      expect(find.byKey(const Key('citizen_profile_change_password_button')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('header account icon opens the finished profile with citizen details', (tester) async {
       await tester.pumpWidget(createCitizenTestApp());
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('citizen_account_button')));
       await tester.pumpAndSettle();
 
+      expect(find.byType(CitizenProfileScreen), findsOneWidget);
       expect(find.text('Nimali Fernando'), findsOneWidget);
       expect(find.text('nimali@smartwaste.lk'), findsOneWidget);
       expect(find.text('Citizen'), findsAtLeastNWidgets(1));
-      expect(find.byKey(const Key('account_sheet_change_password')), findsOneWidget);
-      expect(find.byKey(const Key('account_sheet_logout')), findsOneWidget);
+      expect(find.byKey(const Key('citizen_profile_change_password_button')), findsOneWidget);
+      expect(find.byKey(const Key('citizen_profile_back_button')), findsOneWidget);
+      expect(find.byKey(const Key('citizen_profile_logout_button')), findsOneWidget);
+      expect(find.textContaining('scheduled for implementation'), findsNothing);
+      expect(find.textContaining('coming soon'), findsNothing);
+      expect(find.textContaining('future update'), findsNothing);
     });
 
-    testWidgets('tapping Change Password in account sheet navigates to ChangePasswordScreen', (tester) async {
+    testWidgets('Change Password opens the shared authenticated screen', (tester) async {
       await tester.pumpWidget(createCitizenTestApp());
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('citizen_account_button')));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('account_sheet_change_password')));
+      await tester.tap(find.byKey(const Key('citizen_profile_change_password_button')));
       await tester.pumpAndSettle();
 
       expect(find.byType(ChangePasswordScreen), findsOneWidget);
     });
 
-    testWidgets('tapping Logout in account sheet triggers notifier logout and navigates to Login', (tester) async {
+    testWidgets('Logout uses the existing notifier and navigates to Login', (tester) async {
       final mockNotifier = MockCitizenAuthNotifier(const AuthState.authenticated(citizenUser));
 
       await tester.pumpWidget(createCitizenTestApp(
@@ -456,7 +510,9 @@ void main() {
       await tester.tap(find.byKey(const Key('citizen_account_button')));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('account_sheet_logout')));
+      final logoutButton = find.byKey(const Key('citizen_profile_logout_button'));
+      await tester.ensureVisible(logoutButton);
+      await tester.tap(logoutButton);
       await tester.pumpAndSettle();
 
       expect(mockNotifier.logoutCalled, isTrue);
@@ -465,6 +521,24 @@ void main() {
   });
 
   group('Responsive Viewport Tests', () {
+    testWidgets('finished profile actions remain usable at 320px', (tester) async {
+      tester.view.physicalSize = const Size(320 * 3.0, 640 * 3.0);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(createCitizenTestApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('citizen_account_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CitizenProfileScreen), findsOneWidget);
+      expect(find.byKey(const Key('citizen_profile_change_password_button')), findsOneWidget);
+      expect(find.byKey(const Key('citizen_profile_back_button')), findsOneWidget);
+      expect(find.byKey(const Key('citizen_profile_logout_button')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('renders cleanly without overflow on narrow 320px viewport', (tester) async {
       tester.view.physicalSize = const Size(320 * 3.0, 640 * 3.0);
       tester.view.devicePixelRatio = 3.0;
@@ -530,6 +604,46 @@ void main() {
       expect(mockRepo.capturedPageSize, 3);
       expect(mockRepo.capturedSortBy, 'createdAt');
       expect(mockRepo.capturedSortDirection, 'desc');
+    });
+
+    testWidgets('pull to refresh reloads recent reports and updates visible activity', (tester) async {
+      mockRepo.reportsToReturn = [
+        createSampleReport(id: 'rep-old', description: 'Old report', wasteType: WasteType.general, status: WasteReportStatus.submitted),
+      ];
+      await tester.pumpWidget(createCitizenTestApp());
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('recent_activity_item_rep-old')), findsOneWidget);
+      expect(mockRepo.callCount, 1);
+
+      mockRepo.reportsToReturn = [
+        createSampleReport(id: 'rep-new', description: 'New report', wasteType: WasteType.recyclable, status: WasteReportStatus.verified),
+      ];
+      await tester.fling(find.byKey(const Key('citizen_greeting_text')), const Offset(0, 300), 1000);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('citizen_dashboard_refresh_indicator')), findsOneWidget);
+      expect(mockRepo.callCount, 2);
+      expect(find.byKey(const Key('recent_activity_item_rep-old')), findsNothing);
+      expect(find.byKey(const Key('recent_activity_item_rep-new')), findsOneWidget);
+    });
+
+    testWidgets('failed refresh keeps last loaded activity and finishes cleanly', (tester) async {
+      mockRepo.reportsToReturn = [
+        createSampleReport(id: 'rep-stable', description: 'Saved report', wasteType: WasteType.general, status: WasteReportStatus.submitted),
+      ];
+      await tester.pumpWidget(createCitizenTestApp());
+      await tester.pumpAndSettle();
+      mockRepo.shouldThrow = true;
+
+      await tester.fling(find.byKey(const Key('citizen_greeting_text')), const Offset(0, 300), 1000);
+      await tester.pumpAndSettle();
+
+      expect(mockRepo.callCount, 2);
+      expect(find.byKey(const Key('recent_activity_item_rep-stable')), findsOneWidget);
+      expect(find.byKey(const Key('citizen_recent_activity_loading')), findsNothing);
+      expect(find.byKey(const Key('citizen_recent_activity_error')), findsNothing);
+      expect(find.text("Couldn't load recent activity."), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('renders up to 3 recent waste reports with readable waste type, status badge, and submission time', (tester) async {

@@ -19,6 +19,19 @@ vi.mock('../../../features/ai-approvals/api/agentWorkflowApi', () => ({
   },
 }));
 
+vi.mock('../api/dashboardApi', () => ({
+  dashboardApi: {
+    getNeedsAttention: vi.fn().mockResolvedValue([]),
+    getOverview: vi.fn().mockResolvedValue({
+      reportsAwaitingReview: 4,
+      activeBins: 12,
+      scheduledCollections: 7,
+      openCollectionTasks: 5,
+      openComplaints: 3,
+    }),
+  },
+}));
+
 describe('WasteOfficer Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -92,7 +105,7 @@ describe('WasteOfficer Dashboard', () => {
     );
   });
 
-  it('renders Needs Attention section with operational empty state', () => {
+  it('renders Needs Attention section with a real empty state', async () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -112,12 +125,8 @@ describe('WasteOfficer Dashboard', () => {
     );
 
     expect(screen.getByText('Needs Attention')).toBeInTheDocument();
-    expect(screen.getByText('All Operational Queues Clear')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /no live operational data is available yet\. waste reports and other operational items will appear here once the corresponding modules are connected\./i
-      )
-    ).toBeInTheDocument();
+    expect(await screen.findByText('All Operational Queues Clear')).toBeInTheDocument();
+    expect(screen.getByText('No waste reports or complaints are currently awaiting review.')).toBeInTheDocument();
   });
 
   it('does not render academic Component 1/2/3/4 badges or labels', () => {
@@ -254,7 +263,7 @@ describe('WasteOfficer Dashboard', () => {
     verifyLinks(/complaints/i, '/officer/complaints');
   });
 
-  it('renders operational overview metric cards with placeholder values', () => {
+  it('renders all operational overview metric cards', () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -280,9 +289,6 @@ describe('WasteOfficer Dashboard', () => {
     expect(screen.getByText('Open Collection Tasks')).toBeInTheDocument();
     expect(screen.getByText('Open Complaints')).toBeInTheDocument();
 
-    // Verify placeholder dashes are rendered (at least 5 for the 5 cards)
-    const placeholders = screen.getAllByText('—');
-    expect(placeholders.length).toBeGreaterThanOrEqual(5);
   });
 
   it('redirects non-WasteOfficer (e.g. Citizen) to /unauthorized when accessing /officer/dashboard', () => {

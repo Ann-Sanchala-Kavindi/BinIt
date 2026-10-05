@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -54,9 +54,14 @@ describe('AiApprovalsPage dashboard and initiation', () => {
     const processingWorkflow: AgentWorkflowSummary = { ...reportWorkflow, id: 'processing-report', status: 'Planning', currentStep: 'CollectionPlanning' };
     (agentWorkflowApi.listWorkflows as ReturnType<typeof vi.fn>).mockResolvedValue(pageResult([reportWorkflow, processingWorkflow, workflows[0], { ...workflows[0], id: 'dispatch', status: 'AwaitingDispatchApproval' }, workflows[1]]));
     renderDashboard('MunicipalManager');
-    expect(await screen.findAllByText('Citizen Report Response')).toHaveLength(2);
-    expect(screen.getAllByText('Report C17ADD4F')).toHaveLength(2);
-    expect(screen.getAllByRole('link', { name: 'Report C17ADD4F' })[0]).toHaveAttribute('href', `/manager/reports/${reportId}`);
+    const reportLinks = await screen.findAllByRole('link', { name: 'Report C17ADD4F' });
+    expect(reportLinks).toHaveLength(2);
+    const sourceCell = within(reportLinks[0].closest('tr')!).getAllByRole('cell')[1];
+    expect(sourceCell).toHaveTextContent('Report C17ADD4F');
+    expect(sourceCell).not.toHaveTextContent('Citizen Report Response');
+    expect(sourceCell).not.toHaveTextContent(reportId);
+    expect(reportLinks[0]).toHaveAttribute('href', `/manager/reports/${reportId}`);
+    expect(within(reportLinks[0].closest('tr')!).getByRole('link', { name: 'Open Workflow' })).toHaveAttribute('href', '/manager/ai-approvals/citizen-report');
     expect(screen.getByText('Awaiting Report Verification')).toBeInTheDocument();
     await userEvent.setup().selectOptions(screen.getByLabelText('Workflow status filter'), 'attention');
     expect(screen.getByText('Awaiting Report Verification')).toBeInTheDocument();
@@ -65,6 +70,15 @@ describe('AiApprovalsPage dashboard and initiation', () => {
     expect(screen.queryByText('Planning')).not.toBeInTheDocument();
     expect(screen.queryByText('Workflow Completed')).toBeInTheDocument(); // Summary remains visible.
     expect(screen.getAllByText('Operational Planning')).toHaveLength(2);
+  });
+
+  it('keeps a long objective available as a tooltip while the table action stays compact', async () => {
+    const objective = 'Analyze the submitted waste report and continue end-to-end collection planning using current authoritative data after staff verification.';
+    (agentWorkflowApi.listWorkflows as ReturnType<typeof vi.fn>).mockResolvedValue(pageResult([{ ...workflows[0], objective }]));
+    renderDashboard();
+    const objectiveText = await screen.findByTitle(objective);
+    expect(objectiveText).toHaveTextContent(objective);
+    expect(within(objectiveText.closest('tr')!).getByRole('link', { name: 'Open Workflow' })).toHaveTextContent('Open');
   });
 
   it('renders loading followed by an empty state', async () => {

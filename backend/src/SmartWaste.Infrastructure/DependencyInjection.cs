@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using SmartWaste.Application.Collection.Interfaces;
 using SmartWaste.Application.Complaints.Interfaces;
+using SmartWaste.Application.Dashboard.Interfaces;
 using SmartWaste.Application.Fleet.Interfaces;
 using SmartWaste.Application.Common.Options;
 using SmartWaste.Application.Interfaces;
@@ -15,6 +16,7 @@ using SmartWaste.Infrastructure.Workflow.Services;
 using SmartWaste.Domain.Entities;
 using SmartWaste.Infrastructure.Collection.Services;
 using SmartWaste.Infrastructure.Complaints.Services;
+using SmartWaste.Infrastructure.Dashboard.Services;
 using SmartWaste.Infrastructure.Fleet.Services;
 using SmartWaste.Infrastructure.Operations.Services;
 using SmartWaste.Infrastructure.Persistence;
@@ -88,6 +90,8 @@ public static class DependencyInjection
         // Component 4 — Citizen Complaints & Driver Operations Management
         services.AddScoped<IComplaintService, ComplaintService>();
         services.AddScoped<IOperationalIssueService, OperationalIssueService>();
+        services.AddScoped<IWasteOfficerDashboardService, WasteOfficerDashboardService>();
+        services.AddScoped<IMunicipalManagerDashboardService, MunicipalManagerDashboardService>();
 
         // Agentic AI Workflow Services
         services.AddSingleton<IAgentWorkflowStateMachine, AgentWorkflowStateMachine>();

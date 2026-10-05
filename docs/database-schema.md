@@ -592,6 +592,7 @@ An assignment groups multiple existing **Scheduled** C2 tasks for one Driver and
 | `CollectionAssignment` Field | Type | Nullable | Description |
 | :--- | :--- | :--- | :--- |
 | `Id` | `Guid` | No | Primary key. |
+| `AssignmentNumber` | `long` | No | Positive, globally unique PostgreSQL sequence number assigned at insertion; immutable display identifier. Existing assignments are numbered by `CreatedAt`, then `Id`. The UUID remains the primary key. |
 | `DriverId` | `Guid` | No | FK to `DriverProfile.UserId` / `AppUser.Id` (restrict delete). |
 | `VehicleId` | `Guid` | No | FK to `Vehicle.Id` (restrict delete). |
 | `AssignedByUserId` | `Guid` | No | FK to the authenticated WasteOfficer who created the ordinary manual assignment (restrict delete). |
@@ -654,6 +655,7 @@ Every assignment has one route containing its ordered task stops. The route is t
 - `CollectionAssignmentTaskClaim` is unique for `(CollectionAssignmentId, CollectionTaskId)` and has a **partial unique index** on `CollectionTaskId WHERE IsActive = true`. This directly enforces one unfinished assignment claim per task without a join.
 - `RouteStop.CollectionAssignmentTaskClaimId` is unique. Its composite FK `(CollectionAssignmentTaskClaimId, CollectionTaskId)` references the claim’s unique `(Id, CollectionTaskId)` pair, enforcing that the stop and claim name the same task.
 - `CollectionAssignment` has partial unique indexes on `DriverId` and `VehicleId` where `Status IN ('Assigned', 'InProgress')`. These predicates use columns on the assignment row and are PostgreSQL-enforceable without a join.
+- `CollectionAssignment.AssignmentNumber` is positive, non-null, and globally unique. PostgreSQL generates it from `CollectionAssignmentNumberSequence`; gaps are permitted and numbers are never reused. `AssignmentReference` is derived for display as `Assignment 001` and is not stored.
 - A creation/cancellation/finalization transaction also revalidates the C2 task status and active claim under database concurrency control; indexes complement, rather than replace, that authoritative service validation.
 - Check constraints enforce all documented enums, positive `CapacityLiters`, required cancellation reason, required failure reason, and timestamp/state consistency.
 

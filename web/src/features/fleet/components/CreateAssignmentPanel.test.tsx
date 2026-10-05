@@ -38,7 +38,7 @@ describe('CreateAssignmentPanel', () => {
     hooks.useDrivers.mockReturnValue(queryResult([availableDriver, offDutyDriver]));
     hooks.useVehicles.mockReturnValue(queryResult([availableVehicle, occupiedVehicle]));
     hooks.useCreateAssignment.mockReturnValue({ mutateAsync, isPending: false });
-    mutateAsync.mockResolvedValue({ id: 'assignment-1' });
+    mutateAsync.mockResolvedValue({ id: 'assignment-1', assignmentReference: 'Assignment 001' });
   });
 
   it('keeps selected tasks across pages, sends their manual order, and preserves missing-coordinate tasks in the draft', async () => {
@@ -65,7 +65,7 @@ describe('CreateAssignmentPanel', () => {
       stops: [{ collectionTaskId: 'task-2', sequence: 1 }, { collectionTaskId: 'task-1', sequence: 2 }],
       compatibilityAcknowledgement: 'Officer reviewed the handling uncertainty.',
     }));
-    expect(onCreated).toHaveBeenCalledWith('assignment-1');
+    expect(onCreated).toHaveBeenCalledWith('assignment-1', 'Assignment 001');
   });
 
   it('disables OffDuty and occupied resources and blocks a too-short acknowledgement locally', async () => {

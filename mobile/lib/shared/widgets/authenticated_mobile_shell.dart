@@ -180,6 +180,8 @@ class AuthenticatedMobileShell extends ConsumerWidget {
   final String? notificationRoute;
   final Key? notificationKey;
   final Key? accountKey;
+  final bool showNotificationAction;
+  final String? accountRoute;
   final Color? backgroundColor;
 
   const AuthenticatedMobileShell({
@@ -194,6 +196,8 @@ class AuthenticatedMobileShell extends ConsumerWidget {
     this.notificationRoute,
     this.notificationKey,
     this.accountKey,
+    this.showNotificationAction = true,
+    this.accountRoute,
     this.backgroundColor,
   });
 
@@ -246,20 +250,25 @@ class AuthenticatedMobileShell extends ConsumerWidget {
             : const Key('citizen_bottom_nav'));
 
     final defaultActions = [
-      IconButton(
-        key: defaultNotificationKey,
-        icon: const Icon(Icons.notifications_outlined),
-        tooltip: 'Notifications',
-        onPressed: () {
-          context.push(defaultNotificationRoute);
-        },
-      ),
+      if (showNotificationAction)
+        IconButton(
+          key: defaultNotificationKey,
+          icon: const Icon(Icons.notifications_outlined),
+          tooltip: 'Notifications',
+          onPressed: () {
+            context.push(defaultNotificationRoute);
+          },
+        ),
       IconButton(
         key: defaultAccountKey,
         icon: const Icon(Icons.account_circle_outlined),
         tooltip: 'Account',
         onPressed: () {
-          showAccountBottomSheet(context, ref);
+          if (accountRoute != null) {
+            context.go(accountRoute!);
+          } else {
+            showAccountBottomSheet(context, ref);
+          }
         },
       ),
       const SizedBox(width: AppSpacing.xs),

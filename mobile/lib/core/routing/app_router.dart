@@ -10,6 +10,7 @@ import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
 import '../../features/citizen/presentation/citizen_dashboard_screen.dart';
 import '../../features/citizen/presentation/citizen_placeholder_screen.dart';
+import '../../features/citizen/presentation/citizen_profile_screen.dart';
 import '../../features/bins/data/public_waste_bins_repository.dart';
 import '../../features/bins/presentation/bin_details_screen.dart';
 import '../../features/bins/presentation/find_bins_screen.dart';
@@ -22,6 +23,7 @@ import '../../features/driver/presentation/driver_dashboard_screen.dart';
 import '../../features/driver/presentation/driver_history_detail_screen.dart';
 import '../../features/driver/presentation/driver_history_screen.dart';
 import '../../features/driver/presentation/driver_placeholder_screen.dart';
+import '../../features/driver/presentation/driver_profile_screen.dart';
 import '../../features/driver/presentation/driver_route_screen.dart';
 import '../../features/driver/presentation/driver_tasks_screen.dart';
 import '../../features/operations/data/operations_repository.dart';
@@ -79,6 +81,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) {
           return AuthenticatedMobileShell(
             currentLocation: state.matchedLocation,
+            showNotificationAction: false,
+            accountRoute: '/citizen/profile',
             destinations: const [
               MobileNavDestination(
                 label: 'Home',
@@ -131,12 +135,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/citizen/profile',
-            builder: (context, state) => const CitizenPlaceholderScreen(
-              title: 'Citizen Profile',
-              description:
-                  'Manage your personal account and contact information.',
-              icon: Icons.person_outline,
-            ),
+            builder: (context, state) => const CitizenProfileScreen(),
           ),
         ],
       ),
@@ -193,8 +192,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/citizen/notifications',
         builder: (context, state) => const CitizenPlaceholderScreen(
           title: 'Notifications',
-          description:
-              'Status updates and municipal alerts will be available here.',
+          description: 'No notifications to display.',
           icon: Icons.notifications_outlined,
           hasScaffold: true,
         ),
@@ -219,9 +217,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return AuthenticatedMobileShell(
             currentLocation: state.matchedLocation,
             bottomNavKey: const Key('driver_bottom_nav'),
-            notificationRoute: '/driver/notifications',
-            notificationKey: const Key('driver_notification_button'),
+            showNotificationAction: false,
             accountKey: const Key('driver_account_button'),
+            accountRoute: '/driver/profile',
             destinations: const [
               MobileNavDestination(
                 label: 'Home',
@@ -270,12 +268,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: '/driver/profile',
-            builder: (context, state) => const DriverPlaceholderScreen(
-              title: 'Driver Profile',
-              description: 'Manage your account and operational credentials.',
-              icon: Icons.person_outline,
-              isProfile: true,
-            ),
+            builder: (context, state) => const DriverProfileScreen(),
           ),
         ],
       ),
@@ -318,7 +311,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/driver/notifications',
         builder: (context, state) => const DriverPlaceholderScreen(
           title: 'Notifications',
-          description: 'Assignment and operational updates will appear here.',
+          description: 'No notifications to display.',
           icon: Icons.notifications_outlined,
           hasScaffold: true,
         ),

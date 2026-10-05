@@ -43,6 +43,8 @@ vi.mock('./CollectionStopsMap', () => ({
 
 const mockDetail: AssignmentDetailDto = {
   id: 'assignment-1',
+  assignmentNumber: 1,
+  assignmentReference: 'Assignment 001',
   driverId: 'driver-1',
   driverName: 'Kasun Fernando',
   vehicleId: 'vehicle-1',
@@ -159,7 +161,9 @@ describe('AssignmentDetailPanel', () => {
 
     render(<AssignmentDetailPanel assignmentId="assignment-1" role="WasteOfficer" onClose={vi.fn()} />);
 
-    expect(screen.getByText('assignment-1')).toBeInTheDocument();
+    expect(screen.getByText('Assignment 001')).toBeInTheDocument();
+    expect(screen.queryByText('assignment-1')).not.toBeInTheDocument();
+    expect(hooks.useAssignmentDetail).toHaveBeenCalledWith('assignment-1');
     expect(screen.getAllByText('Assigned').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Kasun Fernando')).toBeInTheDocument();
     expect(screen.getByText('WP-C34-1001')).toBeInTheDocument();

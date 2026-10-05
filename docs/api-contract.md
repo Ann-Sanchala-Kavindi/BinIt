@@ -1224,6 +1224,7 @@ Existing `POST /api/v1/users` remains the sole way a MunicipalManager provisions
 - **Validation:** one or more unique task IDs; positive contiguous unique stop sequences; each task is existing, `Scheduled`, and unclaimed; selected AppUser has the `Driver` role with an internal availability profile, is `Available`, and is unoccupied; Vehicle is operationally `Available` and unoccupied. Known waste incompatibility returns `409`. Missing/ambiguous compatibility requires the acknowledgement; it does not imply load, compartment, or capacity feasibility.
 - **Atomic side effects:** creates assignment, route (`routingMethod: ManualOrder`), claims, and stops; changes every selected task `Scheduled → Assigned`; appends task and assignment history. `CollectionTask.ScheduledAt` is not changed.
 - **Response:** `201 Created` `CollectionAssignmentDetailDto`; `400` invalid request, `401/403` authentication/role failures, `404` missing resource, `409` stale task/claim/resource/compatibility conflict.
+- Assignment read and creation responses add `assignmentNumber` and derived `assignmentReference` (for example, `Assignment 001`). `id` remains the authoritative UUID for routes, lookup, and relationships; clients cannot submit or change the number.
 
 #### Assignment read/order/cancellation endpoints
 
@@ -1573,6 +1574,66 @@ Retrieves a strictly read-only, paginated, safe projection of WasteReports whose
 - **Error Responses:**
   - `401 Unauthorized`: Missing or invalid `X-Internal-Service-Key` header (`ProblemDetails`).
   - `400 BadRequest`: Query parameter validation failure (`page < 1` or `pageSize < 1` or `pageSize > 50`).
+
+## Waste Officer Dashboard Overview
+
+`GET /api/v1/dashboard/waste-officer/overview` requires a WasteOfficer JWT. Anonymous callers receive `401`; other roles receive `403`.
+
+The `200 OK` response contains aggregate counts only:
+
+```json
+{
+  "reportsAwaitingReview": 4,
+  "activeBins": 12,
+  "scheduledCollections": 7,
+  "openCollectionTasks": 5,
+  "openComplaints": 3
+}
+```
+
+The counts use current authoritative statuses: `WasteReport.Submitted`, `WasteBin.AdministrativeStatus.Active`, `CollectionTask.Scheduled`, `CollectionTask.Assigned` or `InProgress`, and `Complaint.Submitted`, respectively. The endpoint does not return records or change any business state.
+
+## Waste Officer Needs Attention
+
+`GET /api/v1/dashboard/waste-officer/needs-attention` requires a WasteOfficer JWT. Anonymous callers receive `401`; other roles receive `403`.
+
+The `200 OK` response is an array of at most five items. It contains only `WasteReport.Submitted` and `Complaint.Submitted` records, combined by `createdAt` descending with a stable ID tie breaker. An empty queue returns `[]`.
+
+```json
+[
+  {
+    "id": "12345678-0000-0000-0000-000000000001",
+    "itemType": "WasteReport",
+    "reference": "Report 12345678",
+    "createdAt": "2026-10-05T09:42:00Z",
+    "secondaryLabel": "General",
+    "submittedByName": "Kasun Silva",
+    "addressText": "Rajagiriya"
+  }
+]
+```
+
+`id` is the authoritative UUID used for detail navigation. Report and complaint references are derived from the first eight uppercase UUID hex characters. `submittedByName` uses the submitter's display name, or `Citizen` if unavailable. `addressText` is the report address or the complaint's optional incident location; it is `null` when absent. This read-only endpoint omits contact details, profile addresses, descriptions, coordinates, and workflow data.
+
+`GET /api/v1/dashboard/municipal-manager/needs-attention` requires a MunicipalManager JWT. It returns the same DTO and the same five newest combined `WasteReport.Submitted` and `Complaint.Submitted` items as the Waste Officer endpoint. Anonymous callers receive `401`; other roles receive `403`. The manager's `unresolvedComplaints` overview count retains its broader Submitted plus InReview meaning.
+
+## Municipal Manager Dashboard Overview
+
+`GET /api/v1/dashboard/municipal-manager/overview` requires a MunicipalManager JWT. Anonymous callers receive `401`; other roles receive `403`.
+
+The `200 OK` response contains aggregate counts only:
+
+```json
+{
+  "aiWorkflowsAwaitingApproval": 6,
+  "activeCollectionAssignments": 4,
+  "availableVehicles": 8,
+  "openOperationalIncidents": 2,
+  "unresolvedComplaints": 5
+}
+```
+
+The counts use current authoritative states: workflows `AwaitingReportVerification`, `AwaitingCollectionApproval`, or `AwaitingDispatchApproval`; assignments `Assigned` or `InProgress`; vehicles with `OperationalStatus.Available` and no `Assigned` or `InProgress` assignment; operational issues `Reported` or `InReview`; and complaints `Submitted` or `InReview`. The endpoint does not return records or change business state.
 
 ---
 

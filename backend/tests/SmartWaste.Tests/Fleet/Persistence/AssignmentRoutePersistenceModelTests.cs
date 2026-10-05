@@ -39,6 +39,16 @@ public class AssignmentRoutePersistenceModelTests
         assignment.GetIndexes().Should().Contain(index => index.IsUnique &&
             index.GetDatabaseName() == "IX_CollectionAssignments_VehicleId_Unfinished" &&
             index.GetFilter() == "\"Status\" IN ('Assigned', 'InProgress')");
+        assignment.GetIndexes().Should().Contain(index => index.IsUnique &&
+            index.Properties.Select(property => property.Name).SequenceEqual(new[]
+            { nameof(CollectionAssignment.AssignmentNumber) }));
+        assignment.FindProperty(nameof(CollectionAssignment.AssignmentNumber))!
+            .GetDefaultValueSql().Should().Be("nextval('\"CollectionAssignmentNumberSequence\"'::regclass)");
+        assignment.FindProperty(nameof(CollectionAssignment.AssignmentNumber))!
+            .GetAfterSaveBehavior().Should().Be(PropertySaveBehavior.Throw);
+        assignment.GetCheckConstraints().Should().Contain(constraint =>
+            constraint.Name == "CK_CollectionAssignments_AssignmentNumber" &&
+            constraint.Sql == "\"AssignmentNumber\" > 0");
         assignment.GetForeignKeys().Should().OnlyContain(foreignKey =>
             foreignKey.DeleteBehavior == DeleteBehavior.Restrict);
         assignment.GetCheckConstraints().Should().Contain(constraint =>

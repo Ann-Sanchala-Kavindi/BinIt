@@ -17,6 +17,7 @@ import 'package:mobile/features/driver/models/route_stop_model.dart';
 import 'package:mobile/features/driver/models/route_stop_status.dart';
 import 'package:mobile/features/driver/presentation/driver_tasks_screen.dart';
 import 'package:mobile/features/driver/presentation/widgets/driver_stop_card.dart';
+import 'package:mobile/shared/widgets/app_button.dart';
 
 class MockDriverRepository extends DriverRepository {
   AssignmentDetailModel? currentAssignment;
@@ -453,6 +454,32 @@ void main() {
         expect(find.text('Finalize'), findsNothing);
       },
     );
+
+    testWidgets('pending stop actions stack with matching geometry at 320px', (tester) async {
+      tester.view.physicalSize = const Size(320 * 3.0, 640 * 3.0);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final repo = MockDriverRepository(currentAssignment: sampleAssignment);
+      await tester.pumpWidget(createTasksScreenApp(repository: repo));
+      await tester.pumpAndSettle();
+
+      final fail = find.byKey(const Key('driver_stop_fail_3'));
+      final complete = find.byKey(const Key('driver_stop_complete_3'));
+      expect(fail, findsOneWidget);
+      expect(complete, findsOneWidget);
+      final failRect = tester.getRect(fail);
+      final completeRect = tester.getRect(complete);
+      expect(failRect.top, lessThan(completeRect.top));
+      expect(failRect.left, completeRect.left);
+      expect(failRect.width, completeRect.width);
+      expect(failRect.height, completeRect.height);
+      expect(tester.widget<AppButton>(fail).variant, AppButtonVariant.destructive);
+      expect(tester.widget<AppButton>(complete).variant, AppButtonVariant.primary);
+      expect(tester.widget<AppButton>(fail).height, tester.widget<AppButton>(complete).height);
+      expect(tester.takeException(), isNull);
+    });
 
     testWidgets(
       '11. failing a stop closes its dialog safely after the authoritative refresh',

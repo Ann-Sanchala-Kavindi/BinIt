@@ -60,7 +60,8 @@ class DriverAssignmentScreen extends ConsumerWidget {
               // Surfaced through AsyncValue.error
             }
           },
-          child: Center(
+          child: Align(
+            alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 540),
               child: assignmentAsync.when(

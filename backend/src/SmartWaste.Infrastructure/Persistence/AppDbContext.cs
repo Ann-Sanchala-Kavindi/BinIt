@@ -60,6 +60,7 @@ public class AppDbContext : IdentityDbContext<AppUser, IdentityRole<Guid>, Guid>
     {
         base.OnModelCreating(builder);
 
+        builder.HasSequence<long>("CollectionAssignmentNumberSequence");
         builder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
         // AppUser configuration

@@ -20,11 +20,13 @@ import 'package:mobile/features/driver/models/route_stop_model.dart';
 import 'package:mobile/features/driver/models/route_stop_status.dart';
 import 'package:mobile/features/driver/presentation/driver_assignment_screen.dart';
 import 'package:mobile/features/driver/presentation/driver_dashboard_screen.dart';
+import 'package:mobile/features/driver/presentation/driver_profile_screen.dart';
 import 'package:mobile/features/driver/presentation/driver_route_screen.dart';
 import 'package:mobile/features/driver/presentation/driver_tasks_screen.dart';
 import 'package:mobile/features/operations/data/operations_repository.dart';
 import 'package:mobile/features/operations/models/operational_issue_model.dart';
 import 'package:mobile/features/operations/presentation/driver_operational_issues_screen.dart';
+import 'package:mobile/shared/widgets/app_card.dart';
 
 class MockDriverAuthNotifier extends AuthNotifier {
   final AuthState _initial;
@@ -270,7 +272,8 @@ void main() {
       expect(find.textContaining('Ready for today\'s operations'), findsOneWidget);
 
       // Top action buttons
-      expect(find.byKey(const Key('driver_notification_button')), findsOneWidget);
+      expect(find.byKey(const Key('driver_notification_button')), findsNothing);
+      expect(find.byTooltip('Notifications'), findsNothing);
       expect(find.byKey(const Key('driver_account_button')), findsOneWidget);
     });
 
@@ -296,7 +299,7 @@ void main() {
       expect(find.text('No active assignment'), findsOneWidget);
       expect(
           find.text(
-              'Your active collection assignment will appear here once operations are connected.'),
+              'No active collection assignment is available right now.'),
           findsOneWidget);
       expect(find.byKey(const Key('driver_view_assignment_button')), findsOneWidget);
       expect(find.text('View Assignment'), findsOneWidget);
@@ -336,15 +339,16 @@ void main() {
               matching: find.text('Report a problem during collection.')),
           findsOneWidget);
 
-      final notificationsCard = find.byKey(const Key('driver_quick_action_notifications'));
-      expect(notificationsCard, findsOneWidget);
-      expect(find.descendant(of: notificationsCard, matching: find.text('Notifications')),
+      final profileCard = find.byKey(const Key('driver_quick_action_profile'));
+      expect(profileCard, findsOneWidget);
+      expect(find.descendant(of: profileCard, matching: find.text('Profile')),
           findsOneWidget);
       expect(
           find.descendant(
-              of: notificationsCard,
-              matching: find.text('View assignment and service updates.')),
+              of: profileCard,
+              matching: find.text('View your account and profile actions.')),
           findsOneWidget);
+      expect(find.byKey(const Key('driver_quick_action_notifications')), findsNothing);
 
       // Today's Work empty state
       expect(find.byKey(const Key('driver_todays_work_section')), findsOneWidget);
@@ -654,7 +658,7 @@ void main() {
       expect(find.byType(DriverDashboardScreen), findsOneWidget);
     });
 
-    testWidgets('tapping Quick Action cards navigates to corresponding driver placeholders',
+    testWidgets('tapping Quick Action cards navigates to driver destinations',
         (tester) async {
       await tester.pumpWidget(createDriverTestApp());
       await tester.pumpAndSettle();
@@ -697,16 +701,15 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(DriverDashboardScreen), findsOneWidget);
 
-      // 4. Notifications
-      final notifCard = find.byKey(const Key('driver_quick_action_notifications'));
-      await tester.ensureVisible(notifCard);
-      await tester.tap(notifCard);
+      // 4. Profile
+      final profileCard = find.byKey(const Key('driver_quick_action_profile'));
+      await tester.ensureVisible(profileCard);
+      await tester.tap(profileCard);
       await tester.pumpAndSettle();
-      expect(find.text('Assignment and operational updates will appear here.'),
-          findsAtLeastNWidgets(1));
+      expect(find.byType(DriverProfileScreen), findsOneWidget);
 
-      // Back via placeholder back button
-      await tester.tap(find.byKey(const Key('driver_placeholder_back_button')));
+      // Back via the existing Driver dashboard route
+      await tester.tap(find.byKey(const Key('driver_profile_back_button')));
       await tester.pumpAndSettle();
       expect(find.byType(DriverDashboardScreen), findsOneWidget);
     });
@@ -728,7 +731,7 @@ void main() {
       // Tap Profile
       await tester.tap(find.byKey(const Key('driver_bottom_nav_profile')));
       await tester.pumpAndSettle();
-      expect(find.text('Manage your account and operational credentials.'), findsOneWidget);
+      expect(find.byType(DriverProfileScreen), findsOneWidget);
 
       // Tap Home
       await tester.tap(find.byKey(const Key('driver_bottom_nav_home')));
@@ -768,7 +771,7 @@ void main() {
       // Tap Profile
       await tester.tap(find.byKey(const Key('driver_bottom_nav_profile')));
       await tester.pumpAndSettle();
-      expect(find.text('Manage your account and operational credentials.'), findsOneWidget);
+      expect(find.byType(DriverProfileScreen), findsOneWidget);
 
       // Trigger system back button
       await tester.binding.handlePopRoute();
@@ -778,16 +781,16 @@ void main() {
       expect(find.byType(DriverDashboardScreen), findsOneWidget);
     });
 
-    testWidgets('tapping top notifications button navigates to notifications screen',
+    testWidgets('top profile icon opens the Driver Profile screen',
         (tester) async {
       await tester.pumpWidget(createDriverTestApp());
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('driver_notification_button')));
+      expect(find.byKey(const Key('driver_notification_button')), findsNothing);
+      await tester.tap(find.byKey(const Key('driver_account_button')));
       await tester.pumpAndSettle();
 
-      expect(find.text('Assignment and operational updates will appear here.'),
-          findsAtLeastNWidgets(1));
+      expect(find.byType(DriverProfileScreen), findsOneWidget);
     });
   });
 
@@ -814,22 +817,27 @@ void main() {
     });
   });
 
-  group('Driver Account Actions Tests', () {
-    testWidgets('opens account bottom sheet and displays driver details', (tester) async {
+  group('Driver Profile Actions Tests', () {
+    testWidgets('shows driver identity and only the working profile actions', (tester) async {
       await tester.pumpWidget(createDriverTestApp());
       await tester.pumpAndSettle();
 
       await tester.tap(find.byKey(const Key('driver_account_button')));
       await tester.pumpAndSettle();
 
+      expect(find.byType(DriverProfileScreen), findsOneWidget);
       expect(find.text('Samantha Perera'), findsOneWidget);
       expect(find.text('samantha.p@smartwaste.lk'), findsOneWidget);
       expect(find.text('Driver'), findsAtLeastNWidgets(1));
-      expect(find.byKey(const Key('account_sheet_change_password')), findsOneWidget);
-      expect(find.byKey(const Key('account_sheet_logout')), findsOneWidget);
+      expect(find.byKey(const Key('driver_profile_change_password_button')), findsOneWidget);
+      expect(find.byKey(const Key('driver_profile_back_button')), findsOneWidget);
+      expect(find.byKey(const Key('driver_profile_logout_button')), findsOneWidget);
+      expect(find.textContaining('scheduled for implementation'), findsNothing);
+      expect(find.textContaining('coming soon'), findsNothing);
+      expect(find.textContaining('future update'), findsNothing);
     });
 
-    testWidgets('tapping Change Password in account sheet navigates to ChangePasswordScreen',
+    testWidgets('Change Password opens the existing screen',
         (tester) async {
       await tester.pumpWidget(createDriverTestApp());
       await tester.pumpAndSettle();
@@ -837,13 +845,13 @@ void main() {
       await tester.tap(find.byKey(const Key('driver_account_button')));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('account_sheet_change_password')));
+      await tester.tap(find.byKey(const Key('driver_profile_change_password_button')));
       await tester.pumpAndSettle();
 
       expect(find.byType(ChangePasswordScreen), findsOneWidget);
     });
 
-    testWidgets('tapping Logout in account sheet triggers notifier logout and navigates to Login',
+    testWidgets('Logout invokes the existing notifier and navigates to Login',
         (tester) async {
       final mockNotifier =
           MockDriverAuthNotifier(const AuthState.authenticated(driverUser));
@@ -856,7 +864,9 @@ void main() {
       await tester.tap(find.byKey(const Key('driver_account_button')));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('account_sheet_logout')));
+      final logoutButton = find.byKey(const Key('driver_profile_logout_button'));
+      await tester.ensureVisible(logoutButton);
+      await tester.tap(logoutButton);
       await tester.pumpAndSettle();
 
       expect(mockNotifier.logoutCalled, isTrue);
@@ -865,6 +875,60 @@ void main() {
   });
 
   group('Driver Responsive Viewport Tests', () {
+    testWidgets('secondary screens align content below the shared header', (tester) async {
+      tester.view.physicalSize = const Size(390 * 3.0, 844 * 3.0);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(createDriverTestApp());
+      await tester.pumpAndSettle();
+      final headerBottom = tester.getBottomLeft(find.byType(AppBar)).dy;
+
+      await tester.tap(find.byKey(const Key('driver_bottom_nav_tasks')));
+      await tester.pumpAndSettle();
+      expect(find.text('Tasks'), findsWidgets);
+      expect(find.byKey(const Key('driver_account_button')), findsOneWidget);
+      final tasksGap = tester.getTopLeft(find.byKey(const Key('driver_tasks_empty_state'))).dy - headerBottom;
+
+      await tester.tap(find.byKey(const Key('driver_bottom_nav_route')));
+      await tester.pumpAndSettle();
+      expect(find.text('Route'), findsWidgets);
+      final routeGap = tester.getTopLeft(find.byKey(const Key('driver_route_empty_state'))).dy - headerBottom;
+
+      await tester.tap(find.byKey(const Key('driver_bottom_nav_profile')));
+      await tester.pumpAndSettle();
+      final profileCard = find.descendant(of: find.byType(DriverProfileScreen), matching: find.byType(AppCard));
+      final profileGap = tester.getTopLeft(profileCard).dy - headerBottom;
+      expect(tasksGap, inInclusiveRange(16, 48));
+      expect(routeGap, inInclusiveRange(16, 48));
+      expect(profileGap, inInclusiveRange(16, 48));
+      expect(find.byKey(const Key('driver_bottom_nav')), findsOneWidget);
+      expect(find.byKey(const Key('driver_profile_change_password_button')), findsOneWidget);
+      expect(find.byKey(const Key('driver_profile_back_button')), findsOneWidget);
+      expect(find.byKey(const Key('driver_profile_logout_button')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('profile actions remain usable on a narrow 320px viewport',
+        (tester) async {
+      tester.view.physicalSize = const Size(320 * 3.0, 640 * 3.0);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await tester.pumpWidget(createDriverTestApp());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('driver_account_button')));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(DriverProfileScreen), findsOneWidget);
+      expect(find.byKey(const Key('driver_profile_change_password_button')), findsOneWidget);
+      expect(find.byKey(const Key('driver_profile_back_button')), findsOneWidget);
+      expect(find.byKey(const Key('driver_profile_logout_button')), findsOneWidget);
+    });
+
     testWidgets('renders cleanly without overflow on narrow 320px viewport',
         (tester) async {
       tester.view.physicalSize = const Size(320 * 3.0, 640 * 3.0);

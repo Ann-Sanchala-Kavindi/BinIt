@@ -19,7 +19,6 @@ import { ManagerDashboardPage } from '../features/manager/pages/ManagerDashboard
 import { UserManagementPage } from '../features/manager/pages/UserManagementPage';
 import { ChangePasswordPage } from '../features/auth/pages/ChangePasswordPage';
 import { managerNavItems } from '../components/layout/navConfig';
-import { ComingSoonPage } from '../pages/ComingSoonPage';
 import { WasteReportsPage } from '../features/reporting/pages/WasteReportsPage';
 import { WasteReportDetailPage } from '../features/reporting/pages/WasteReportDetailPage';
 import { BinsPage } from '../features/collection/pages/BinsPage';
@@ -161,27 +160,6 @@ export const AppRoutes: React.FC = () => {
             <Route
               path="/manager/fleet"
               element={<ManagerFleetRoutesPage />}
-            />
-
-            <Route
-              path="/manager/analytics"
-              element={
-                <ComingSoonPage
-                  title="Analytics"
-                  description="Aggregated municipal operational metrics, service performance, and reporting. This module is currently under development."
-                  backTo="/manager/dashboard"
-                />
-              }
-            />
-            <Route
-              path="/manager/audit"
-              element={
-                <ComingSoonPage
-                  title="Audit Logs"
-                  description="Auditable activity history for AI recommendations, approvals, and executive decisions. This module is currently under development."
-                  backTo="/manager/dashboard"
-                />
-              }
             />
           </Route>
         </Route>

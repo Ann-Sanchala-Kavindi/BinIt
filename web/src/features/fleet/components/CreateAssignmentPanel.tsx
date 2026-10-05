@@ -14,7 +14,7 @@ import type { DriverSummaryDto, VehicleSummaryDto } from '../types/fleet';
 
 interface CreateAssignmentPanelProps {
   onCancel: () => void;
-  onCreated: (assignmentId: string) => void;
+  onCreated: (assignmentId: string, assignmentReference?: string) => void;
 }
 
 const pageSize = 20;
@@ -91,7 +91,7 @@ export const CreateAssignmentPanel: React.FC<CreateAssignmentPanelProps> = ({ on
     setFormError(null);
     try {
       const created = await create.mutateAsync(request);
-      onCreated(created.id);
+      onCreated(created.id, created.assignmentReference);
     } catch (error) {
       setFormError(errorMessage(error));
     }

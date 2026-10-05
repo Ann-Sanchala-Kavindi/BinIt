@@ -37,10 +37,16 @@ public class AssignmentReadServiceTests
         var driver = new AppUser { Id = Guid.NewGuid(), FullName = "Driver", UserName = "driver" };
         var other = new AppUser { Id = Guid.NewGuid(), FullName = "Other", UserName = "other" };
         var vehicle = new Vehicle { Id = Guid.NewGuid(), RegistrationNumber = "C3-READ", CapacityLiters = 1 };
-        var assignment = new CollectionAssignment { DriverId = driver.Id, Driver = new DriverProfile { UserId = driver.Id, User = driver, LicenseNumber = "L1" }, VehicleId = vehicle.Id, Vehicle = vehicle, AssignedByUserId = Guid.NewGuid() };
+        var assignment = new CollectionAssignment { AssignmentNumber = 42, DriverId = driver.Id, Driver = new DriverProfile { UserId = driver.Id, User = driver, LicenseNumber = "L1" }, VehicleId = vehicle.Id, Vehicle = vehicle, AssignedByUserId = Guid.NewGuid() };
         db.AddRange(driver, other, vehicle, assignment); await db.SaveChangesAsync();
         var service = new AssignmentReadService(db);
-        (await service.GetDetailAsync(assignment.Id, driver.Id, AppRoles.Driver)).Id.Should().Be(assignment.Id);
+        var detail = await service.GetDetailAsync(assignment.Id, driver.Id, AppRoles.Driver);
+        detail.Id.Should().Be(assignment.Id);
+        detail.AssignmentNumber.Should().Be(42);
+        detail.AssignmentReference.Should().Be("Assignment 042");
+        var list = await service.GetMineAsync(new AssignmentListQuery(), driver.Id, AppRoles.Driver);
+        list.Items.Single().Id.Should().Be(assignment.Id);
+        list.Items.Single().AssignmentReference.Should().Be("Assignment 042");
         await FluentActions.Invoking(() => service.GetDetailAsync(assignment.Id, other.Id, AppRoles.Driver)).Should().ThrowAsync<ForbiddenException>();
     }
 

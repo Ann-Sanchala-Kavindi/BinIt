@@ -11,6 +11,7 @@ import type { CollectionAssignmentStatus } from '../types/assignments';
 interface AssignmentsSectionProps {
   role: 'WasteOfficer' | 'MunicipalManager';
   createdAssignmentId?: string | null;
+  createdAssignmentReference?: string | null;
 }
 
 const assignmentStatuses: CollectionAssignmentStatus[] = [
@@ -37,7 +38,7 @@ const formatDateTime = (value: string) => {
       }).format(date);
 };
 
-export const AssignmentsSection: React.FC<AssignmentsSectionProps> = ({ role, createdAssignmentId }) => {
+export const AssignmentsSection: React.FC<AssignmentsSectionProps> = ({ role, createdAssignmentId, createdAssignmentReference }) => {
   const [status, setStatus] = useState<CollectionAssignmentStatus | ''>('');
   const [page, setPage] = useState(1);
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null);
@@ -75,7 +76,7 @@ export const AssignmentsSection: React.FC<AssignmentsSectionProps> = ({ role, cr
         <Alert variant="success" title="Assignment created">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>
-              Assignment <span className="font-mono font-semibold">{createdAssignmentId}</span> is now listed. You can
+              {createdAssignmentReference ?? assignmentList?.items.find((assignment) => assignment.id === createdAssignmentId)?.assignmentReference ?? 'New assignment'} is now listed. You can
               review its details or reorder its unstarted stops.
             </span>
             <Button
@@ -153,7 +154,7 @@ export const AssignmentsSection: React.FC<AssignmentsSectionProps> = ({ role, cr
               <tbody className="divide-y divide-slate-100">
                 {assignmentList.items.map((assignment) => (
                   <tr key={assignment.id} className="transition-colors hover:bg-slate-50/70">
-                    <td className="px-4 py-3.5 font-mono text-[11px] font-semibold text-slate-800">{assignment.id}</td>
+                    <td className="px-4 py-3.5 font-semibold text-slate-800">{assignment.assignmentReference ?? assignment.id}</td>
                     <td className="px-4 py-3.5 font-semibold text-slate-900">
                       {assignment.driverName || 'Driver unavailable'}
                     </td>

@@ -515,7 +515,7 @@ class _CurrentAssignmentCard extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpacing.xxs),
                   Text(
-                    'Your active collection assignment will appear here once operations are connected.',
+                    'No active collection assignment is available right now.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppColors.textSecondary,
                           height: 1.4,
@@ -770,12 +770,12 @@ class _DriverQuickActionsGrid extends StatelessWidget {
       isShellTab: false,
     ),
     _DriverQuickActionItem(
-      label: 'Notifications',
-      description: 'View assignment and service updates.',
-      icon: Icons.notifications_outlined,
-      route: '/driver/notifications',
-      key: Key('driver_quick_action_notifications'),
-      isShellTab: false,
+      label: 'Profile',
+      description: 'View your account and profile actions.',
+      icon: Icons.person_outline,
+      route: '/driver/profile',
+      key: Key('driver_quick_action_profile'),
+      isShellTab: true,
     ),
   ];
 

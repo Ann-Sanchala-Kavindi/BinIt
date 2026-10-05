@@ -37,6 +37,8 @@ export interface AvailableAssignmentTaskDto {
 
 export interface AssignmentSummaryDto {
   id: string;
+  assignmentNumber?: number;
+  assignmentReference?: string;
   status: CollectionAssignmentStatus;
   driverId: string;
   driverName: string;
@@ -74,6 +76,8 @@ export interface CreateCollectionAssignmentRequest {
 
 export interface CreatedAssignmentDto {
   id: string;
+  assignmentNumber?: number;
+  assignmentReference?: string;
 }
 
 export interface RouteStopHistoryReadDto {

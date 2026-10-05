@@ -9,8 +9,6 @@ import {
   AiWorkflowIcon,
   FleetIcon,
   OperationsIcon,
-  AnalyticsIcon,
-  AuditIcon,
   UsersIcon,
 } from '../ui/Icons';
 
@@ -40,6 +38,4 @@ export const managerNavItems: NavItem[] = [
   { label: 'Waste Reports', to: '/manager/reports', icon: <ReportsIcon /> },
   { label: 'Complaints', to: '/manager/complaints', icon: <ComplaintsIcon /> },
   { label: 'Operations', to: '/manager/operations', icon: <OperationsIcon /> },
-  { label: 'Analytics', to: '/manager/analytics', icon: <AnalyticsIcon /> },
-  { label: 'Audit Logs', to: '/manager/audit', icon: <AuditIcon /> },
 ];

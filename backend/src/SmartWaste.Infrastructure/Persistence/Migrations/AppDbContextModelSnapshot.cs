@@ -22,6 +22,8 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.HasSequence("CollectionAssignmentNumberSequence");
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", b =>
                 {
                     b.Property<Guid>("Id")
@@ -206,6 +208,11 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("AssignedByUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<long>("AssignmentNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValueSql("nextval('\"CollectionAssignmentNumberSequence\"'::regclass)");
+
                     b.Property<string>("CancellationReason")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
@@ -252,6 +259,9 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("AssignedByUserId");
 
+                    b.HasIndex("AssignmentNumber")
+                        .IsUnique();
+
                     b.HasIndex("CompatibilityAcknowledgedByUserId");
 
                     b.HasIndex("DriverId")
@@ -266,6 +276,8 @@ namespace SmartWaste.Infrastructure.Persistence.Migrations
 
                     b.ToTable("CollectionAssignments", null, t =>
                         {
+                            t.HasCheckConstraint("CK_CollectionAssignments_AssignmentNumber", "\"AssignmentNumber\" > 0");
+
                             t.HasCheckConstraint("CK_CollectionAssignments_CancellationReason", "(\"Status\" <> 'Cancelled') OR (\"CancellationReason\" IS NOT NULL AND LENGTH(TRIM(\"CancellationReason\")) BETWEEN 5 AND 500)");
 
                             t.HasCheckConstraint("CK_CollectionAssignments_Status", "\"Status\" IN ('Assigned', 'InProgress', 'Completed', 'PartiallyCompleted', 'Failed', 'Cancelled')");

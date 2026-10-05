@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -89,6 +89,7 @@ describe('AiWorkflowDetailPage', () => {
     (reportingApi.verifyReport as ReturnType<typeof vi.fn>).mockImplementation(() => { currentReport = reportDetail('Verified'); currentWorkflow = reportWorkflow({ status: 'Planning', currentStep: 'CollectionPlanning' }); return Promise.resolve(currentReport); });
     renderDetail('MunicipalManager');
     expect(await screen.findByRole('button', { name: 'Start Review' })).toBeInTheDocument();
+    expect(within(screen.getByRole('group', { name: 'Report review actions' })).getByRole('button', { name: 'Start Review' })).toBeInTheDocument();
     expect(reportingApi.getWasteReport).toHaveBeenCalledWith(triggerReportId);
     expect(screen.getByRole('link', { name: 'Open Report C17ADD4F details' })).toHaveAttribute('href', `/manager/reports/${triggerReportId}`);
     expect(screen.getByText('AI Advisory Analysis')).toBeInTheDocument();
@@ -99,6 +100,9 @@ describe('AiWorkflowDetailPage', () => {
     await user.click(screen.getByTestId('confirm-start-review-button'));
     await waitFor(() => expect(reportingApi.startReview).toHaveBeenCalledWith(triggerReportId));
     await user.click(await screen.findByRole('button', { name: 'Verify Report' }));
+    const reviewActions = screen.getByRole('group', { name: 'Report review actions' });
+    expect(within(reviewActions).getByRole('button', { name: 'Verify Report' })).toBeInTheDocument();
+    expect(within(reviewActions).getByRole('button', { name: 'Reject Report' })).toBeInTheDocument();
     expect(screen.getByText(/AI advisory recommendation:/)).toHaveTextContent('High');
     expect(screen.getByLabelText('Verification priority')).toHaveValue('');
     expect(screen.getByTestId('confirm-verify-report-button')).toBeDisabled();
