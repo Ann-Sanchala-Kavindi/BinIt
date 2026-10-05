@@ -231,6 +231,65 @@ public class SupabaseFileStorageServiceTests
     }
 
     [Fact]
+    public async Task GetReadUrlAsync_HandlesAbsoluteHttpSignedUrl_Directly()
+    {
+        var (service, handlerMock) = CreateService();
+        const string signedUrl = "http://custom-cdn.supabase.co/storage/v1/object/sign/waste-report-attachments/rep-1/att-1.jpg?token=abc123token";
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(JsonSerializer.Serialize(new { signedURL = signedUrl }))
+            });
+
+        var result = await service.GetReadUrlAsync("waste-reports/rep-1/att-1.jpg", TimeSpan.FromSeconds(900));
+
+        result.Should().Be(signedUrl);
+    }
+
+    [Theory]
+    [InlineData("storage/v1/object/sign/waste-report-attachments/waste-reports/rep-1/att-1.jpg?token=abc123token")]
+    [InlineData("object/sign/waste-report-attachments/waste-reports/rep-1/att-1.jpg?token=abc123token")]
+    public async Task GetReadUrlAsync_HandlesRelativePathWithoutLeadingSlash(string signedPath)
+    {
+        var (service, handlerMock) = CreateService();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(JsonSerializer.Serialize(new { signedURL = signedPath }))
+            });
+
+        var result = await service.GetReadUrlAsync("waste-reports/rep-1/att-1.jpg", TimeSpan.FromSeconds(900));
+
+        result.Should().Be($"{TestBaseUrl}/storage/v1/object/sign/waste-report-attachments/waste-reports/rep-1/att-1.jpg?token=abc123token");
+    }
+
+    [Theory]
+    [InlineData("file:///storage/v1/object/sign/waste-report-attachments/att-1.jpg?token=abc123token")]
+    [InlineData("ftp://example.com/object/sign/waste-report-attachments/att-1.jpg?token=abc123token")]
+    [InlineData("data:text/plain,not-a-signed-url")]
+    public async Task GetReadUrlAsync_RejectsNonHttpAbsoluteSignedUrl(string signedUrl)
+    {
+        var (service, handlerMock) = CreateService();
+        handlerMock.Protected()
+            .Setup<Task<HttpResponseMessage>>("SendAsync", ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>())
+            .ReturnsAsync(new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(JsonSerializer.Serialize(new { signedURL = signedUrl }))
+            });
+
+        var act = () => service.GetReadUrlAsync("waste-reports/rep-1/att-1.jpg", TimeSpan.FromSeconds(900));
+
+        var exception = await act.Should().ThrowAsync<StorageServiceException>();
+        exception.Which.Message.Should().Contain("unsupported signed read URL");
+        exception.Which.Message.Should().NotContain("token=").And.NotContain(TestSecretKey);
+    }
+
+    [Fact]
     public async Task WhenConfigurationMissing_ThrowsInvalidOperationException_WithoutLeakingSecrets()
     {
         var handlerMock = new Mock<HttpMessageHandler>();

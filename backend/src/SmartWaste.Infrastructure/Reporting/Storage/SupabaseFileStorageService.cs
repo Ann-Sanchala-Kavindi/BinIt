@@ -159,20 +159,35 @@ public class SupabaseFileStorageService : IFileStorageService
             throw new StorageServiceException("Cloud storage provider response was missing signed read URL.");
         }
 
-        // If returned path is relative (e.g. "/object/sign/..." or "/storage/v1/object/sign/..."), combine with BaseUrl
+        // A leading-slash Supabase path can be parsed as an absolute file URI on Linux.
+        // Only HTTP(S) URLs are complete signed read URLs.
         if (Uri.TryCreate(signedPath, UriKind.Absolute, out var absoluteUri))
         {
-            return absoluteUri.ToString();
+            if (absoluteUri.Scheme == Uri.UriSchemeHttp || absoluteUri.Scheme == Uri.UriSchemeHttps)
+            {
+                return signedPath;
+            }
+
+            if (!signedPath.StartsWith('/'))
+            {
+                throw new StorageServiceException("Cloud storage provider returned an unsupported signed read URL.");
+            }
         }
 
-        var baseUri = _options.BaseUrl.TrimEnd('/');
         var normalizedPath = signedPath.TrimStart('/');
         if (!normalizedPath.StartsWith("storage/v1/", StringComparison.OrdinalIgnoreCase))
         {
             normalizedPath = $"storage/v1/{normalizedPath}";
         }
 
-        return $"{baseUri}/{normalizedPath}";
+        if (!Uri.TryCreate(_options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var baseUri) ||
+            (baseUri.Scheme != Uri.UriSchemeHttp && baseUri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException("Supabase Storage BaseUrl must use HTTP or HTTPS.");
+        }
+
+        // The relative URI contains the provider's query string, so '?' stays a query delimiter.
+        return new Uri(baseUri, normalizedPath).AbsoluteUri;
     }
 
     private void ApplyAuthHeaders(HttpRequestMessage request)
