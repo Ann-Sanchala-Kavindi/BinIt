@@ -13,6 +13,25 @@ vi.mock('../../../api/authApi', () => ({
   },
 }));
 
+vi.mock('../../../features/ai-approvals/api/agentWorkflowApi', () => ({
+  agentWorkflowApi: {
+    listWorkflows: vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, totalCount: 0, totalPages: 0 }),
+  },
+}));
+
+vi.mock('../api/dashboardApi', () => ({
+  dashboardApi: {
+    getNeedsAttention: vi.fn().mockResolvedValue([]),
+    getOverview: vi.fn().mockResolvedValue({
+      reportsAwaitingReview: 4,
+      activeBins: 12,
+      scheduledCollections: 7,
+      openCollectionTasks: 5,
+      openComplaints: 3,
+    }),
+  },
+}));
+
 describe('WasteOfficer Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -86,7 +105,7 @@ describe('WasteOfficer Dashboard', () => {
     );
   });
 
-  it('renders Needs Attention section with operational empty state', () => {
+  it('renders Needs Attention section with a real empty state', async () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -106,12 +125,8 @@ describe('WasteOfficer Dashboard', () => {
     );
 
     expect(screen.getByText('Needs Attention')).toBeInTheDocument();
-    expect(screen.getByText('All Operational Queues Clear')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /no live operational data is available yet\. waste reports and other operational items will appear here once the corresponding modules are connected\./i
-      )
-    ).toBeInTheDocument();
+    expect(await screen.findByText('All Operational Queues Clear')).toBeInTheDocument();
+    expect(screen.getByText('No waste reports or complaints are currently awaiting review.')).toBeInTheDocument();
   });
 
   it('does not render academic Component 1/2/3/4 badges or labels', () => {
@@ -208,7 +223,7 @@ describe('WasteOfficer Dashboard', () => {
     // Verify all 5 module titles in quick access cards and sidebar
     expect(screen.getAllByText('Waste Reports').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Bin Management').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('Collection Schedules').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Collection Needs').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Collection Tasks').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Complaints').length).toBeGreaterThanOrEqual(1);
   });
@@ -248,7 +263,7 @@ describe('WasteOfficer Dashboard', () => {
     verifyLinks(/complaints/i, '/officer/complaints');
   });
 
-  it('renders operational overview metric cards with placeholder values', () => {
+  it('renders all operational overview metric cards', () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -274,9 +289,6 @@ describe('WasteOfficer Dashboard', () => {
     expect(screen.getByText('Open Collection Tasks')).toBeInTheDocument();
     expect(screen.getByText('Open Complaints')).toBeInTheDocument();
 
-    // Verify placeholder dashes are rendered (at least 5 for the 5 cards)
-    const placeholders = screen.getAllByText('—');
-    expect(placeholders.length).toBeGreaterThanOrEqual(5);
   });
 
   it('redirects non-WasteOfficer (e.g. Citizen) to /unauthorized when accessing /officer/dashboard', () => {
@@ -506,8 +518,57 @@ describe('WasteOfficer Dashboard', () => {
     expect(storeState.user).toBeNull();
   });
 
-  it('ensures WasteOfficer placeholder subroutes link back to /officer/dashboard', async () => {
-    const user = userEvent.setup();
+  it('routes WasteOfficer AI Approvals navigation to the shared dashboard', () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      isLoading: false,
+      accessToken: 'token-officer',
+      user: {
+        id: 'officer-1',
+        fullName: 'Nimal Perera',
+        email: 'officer@smartwaste.local',
+        role: 'WasteOfficer',
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/officer/ai-approvals']}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('heading', { name: 'AI Approvals' })).toBeInTheDocument();
+    expect(screen.getByText('Monitor Agentic AI workflows and manage collection operations.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New End-to-End Collection Operation' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'AI Approvals' })).toHaveAttribute('href', '/officer/ai-approvals');
+  });
+
+  it('ensures /officer/complaints opens the real Complaints operational page', async () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      isLoading: false,
+      accessToken: 'token-officer',
+      user: {
+        id: 'officer-1',
+        fullName: 'Nimal Perera',
+        email: 'officer@smartwaste.local',
+        role: 'WasteOfficer',
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/officer/complaints']}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('heading', { name: /complaints/i })).toBeInTheDocument();
+    expect(
+      screen.getByText(/review and resolve service complaints submitted by citizens/i)
+    ).toBeInTheDocument();
+  });
+
+  it('ensures /officer/waste-reports opens the real Waste Reports operational page', async () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -526,13 +587,9 @@ describe('WasteOfficer Dashboard', () => {
       </MemoryRouter>
     );
 
-    const backButton = screen.getByRole('link', { name: /back to dashboard/i });
-    expect(backButton).toBeInTheDocument();
-    expect(backButton).toHaveAttribute('href', '/officer/dashboard');
-
-    await user.click(backButton);
-    expect(await screen.findByText(/welcome back,/i)).toBeInTheDocument();
-    const headings = await screen.findAllByRole('heading', { name: /waste officer dashboard/i });
-    expect(headings.length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByRole('heading', { name: /waste reports/i })).toBeInTheDocument();
+    expect(
+      screen.getByText(/review and manage reported waste issues across municipal zones/i)
+    ).toBeInTheDocument();
   });
 });

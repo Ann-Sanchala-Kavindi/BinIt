@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SmartWaste.Domain.Common;
 using SmartWaste.Domain.Entities;
+using SmartWaste.Infrastructure.Identity.Services;
 
 namespace SmartWaste.Infrastructure.Persistence;
 
@@ -19,6 +20,7 @@ public static class DatabaseSeeder
     {
         var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
         var userManager = serviceProvider.GetRequiredService<UserManager<AppUser>>();
+        var db = serviceProvider.GetRequiredService<AppDbContext>();
         var logger = serviceProvider.GetRequiredService<ILogger<AppDbContext>>();
 
         // 1. Seed Roles idempotently
@@ -50,12 +52,13 @@ public static class DatabaseSeeder
         // 2. Seed development accounts only in Development environment
         if (isDevelopment)
         {
-            await SeedDevelopmentUsersAsync(userManager, configuration, logger);
+            await SeedDevelopmentUsersAsync(userManager, db, configuration, logger);
         }
     }
 
     private static async Task SeedDevelopmentUsersAsync(
         UserManager<AppUser> userManager,
+        AppDbContext db,
         IConfiguration configuration,
         ILogger logger)
     {
@@ -92,8 +95,19 @@ public static class DatabaseSeeder
                     var createResult = await userManager.CreateAsync(user, devPassword);
                     if (createResult.Succeeded)
                     {
-                        await userManager.AddToRoleAsync(user, devUser.Role);
-                        logger.LogInformation("Seeded development account: {Email} ({Role})", devUser.Email, devUser.Role);
+                        var roleResult = await userManager.AddToRoleAsync(user, devUser.Role);
+                        if (roleResult.Succeeded && devUser.Role == AppRoles.Driver)
+                        {
+                            await DriverProfileProvisioner.EnsureAsync(db, user.Id);
+                        }
+                        if (roleResult.Succeeded)
+                        {
+                            logger.LogInformation("Seeded development account: {Email} ({Role})", devUser.Email, devUser.Role);
+                        }
+                        else
+                        {
+                            logger.LogWarning("Failed to assign seeded role {Role} to {Email}: {Errors}", devUser.Role, devUser.Email, string.Join(", ", roleResult.Errors.Select(error => error.Description)));
+                        }
                     }
                     else
                     {
@@ -108,6 +122,11 @@ public static class DatabaseSeeder
                     {
                         await userManager.AddToRoleAsync(existingUser, devUser.Role);
                         logger.LogInformation("Assigned missing role {Role} to existing development account: {Email}", devUser.Role, devUser.Email);
+                    }
+
+                    if (devUser.Role == AppRoles.Driver && await userManager.IsInRoleAsync(existingUser, AppRoles.Driver))
+                    {
+                        await DriverProfileProvisioner.EnsureAsync(db, existingUser.Id);
                     }
                 }
             }

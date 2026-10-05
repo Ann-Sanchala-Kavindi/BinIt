@@ -13,6 +13,25 @@ vi.mock('../../../api/authApi', () => ({
   },
 }));
 
+vi.mock('../../../features/ai-approvals/api/agentWorkflowApi', () => ({
+  agentWorkflowApi: {
+    listWorkflows: vi.fn().mockResolvedValue({ items: [], page: 1, pageSize: 20, totalCount: 0, totalPages: 0 }),
+  },
+}));
+
+vi.mock('../api/dashboardApi', () => ({
+  managerDashboardApi: {
+    getNeedsAttention: vi.fn().mockResolvedValue([]),
+    getOverview: vi.fn().mockResolvedValue({
+      aiWorkflowsAwaitingApproval: 6,
+      activeCollectionAssignments: 4,
+      availableVehicles: 8,
+      openOperationalIncidents: 2,
+      unresolvedComplaints: 5,
+    }),
+  },
+}));
+
 describe('MunicipalManager Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -44,7 +63,7 @@ describe('MunicipalManager Dashboard', () => {
     expect(screen.getAllByText('Kavindi Silva').length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders Management Overview KPI cards with authentic placeholder values', () => {
+  it('renders all Management Overview KPI cards', () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -70,9 +89,6 @@ describe('MunicipalManager Dashboard', () => {
     expect(screen.getByText('Open Operational Incidents')).toBeInTheDocument();
     expect(screen.getByText('Unresolved Complaints')).toBeInTheDocument();
 
-    // Verify placeholder dashes are rendered (at least 5 for the 5 cards)
-    const placeholders = screen.getAllByText('—');
-    expect(placeholders.length).toBeGreaterThanOrEqual(5);
   });
 
   it('renders AI Workflows Awaiting Approval as the first overview card in DOM order', () => {
@@ -134,14 +150,8 @@ describe('MunicipalManager Dashboard', () => {
       'href',
       '/manager/operations'
     );
-    expect(screen.getByRole('link', { name: /view analytics/i })).toHaveAttribute(
-      'href',
-      '/manager/analytics'
-    );
-    expect(screen.getByRole('link', { name: /review audit logs/i })).toHaveAttribute(
-      'href',
-      '/manager/audit'
-    );
+    expect(screen.queryByRole('link', { name: /analytics/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /audit logs/i })).not.toBeInTheDocument();
   });
 
   it('renders sidebar navigation links matching the manager specification', () => {
@@ -168,18 +178,23 @@ describe('MunicipalManager Dashboard', () => {
 
     // Verify links in sidebar
     expect(screen.getAllByRole('link', { name: /dashboard/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole('link', { name: /waste reports/i }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('link', { name: /waste reports/i })).toHaveAttribute(
+      'href',
+      '/manager/reports'
+    );
     expect(screen.getAllByRole('link', { name: /ai approvals/i }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByRole('link', { name: /fleet & routes/i }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByRole('link', { name: /operations/i }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole('link', { name: /analytics/i }).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByRole('link', { name: /audit logs/i }).length).toBeGreaterThanOrEqual(1);
+    expect(nav.querySelector('a[href="/manager/analytics"]')).not.toBeInTheDocument();
+    expect(nav.querySelector('a[href="/manager/audit"]')).not.toBeInTheDocument();
 
     // Sidebar should NOT contain WasteOfficer items
     expect(screen.queryByRole('link', { name: /bin management/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /collection schedules/i })).not.toBeInTheDocument();
   });
 
-  it('renders Needs Attention / Decision Queue section with operational empty state', () => {
+  it('renders the real Needs Attention empty state', async () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -199,13 +214,8 @@ describe('MunicipalManager Dashboard', () => {
     );
 
     expect(screen.getByRole('heading', { name: 'Needs Attention' })).toBeInTheDocument();
-    expect(screen.getByText('Decision Queue')).toBeInTheDocument();
-    expect(screen.getByText('All Decision Queues Clear')).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /management decisions and operational issues requiring attention will appear here once the corresponding services are connected\./i
-      )
-    ).toBeInTheDocument();
+    expect(await screen.findByText('All Review Queues Clear')).toBeInTheDocument();
+    expect(screen.getByText('No waste reports or complaints are currently awaiting initial review.')).toBeInTheDocument();
   });
 
   it('allows MunicipalManager to logout via top-right header account menu', async () => {
@@ -380,7 +390,7 @@ describe('MunicipalManager Dashboard', () => {
     expect(screen.queryByText('Waste Officer Dashboard')).not.toBeInTheDocument();
   });
 
-  it('renders ComingSoon placeholder for protected manager subroutes and links back to /manager/dashboard', () => {
+  it('renders the shared AI Approvals dashboard for MunicipalManager', () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -399,47 +409,13 @@ describe('MunicipalManager Dashboard', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getAllByText('AI Approvals').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText(/under development/i)).toBeInTheDocument();
-
-    // Verify the back button links to /manager/dashboard and NOT /officer/dashboard
-    const backButton = screen.getByRole('link', { name: /back to dashboard/i });
-    expect(backButton).toBeInTheDocument();
-    expect(backButton).toHaveAttribute('href', '/manager/dashboard');
+    expect(screen.getByRole('heading', { name: 'AI Approvals' })).toBeInTheDocument();
+    expect(screen.getByText('Monitor Agentic AI workflows and manage collection operations.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New End-to-End Collection Operation' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'AI Approvals' })).toHaveAttribute('href', '/manager/ai-approvals');
   });
 
-  it('navigates back to /manager/dashboard when clicking Back to Dashboard without 403 /unauthorized error', async () => {
-    const user = userEvent.setup();
-    useAuthStore.setState({
-      isAuthenticated: true,
-      isLoading: false,
-      accessToken: 'token-manager',
-      user: {
-        id: 'manager-1',
-        fullName: 'Kavindi Silva',
-        email: 'manager@smartwaste.local',
-        role: 'MunicipalManager',
-      },
-    });
-
-    render(
-      <MemoryRouter initialEntries={['/manager/fleet']}>
-        <AppRoutes />
-      </MemoryRouter>
-    );
-
-    // Click "Back to Dashboard"
-    const backButton = screen.getByRole('link', { name: /back to dashboard/i });
-    await user.click(backButton);
-
-    // Directly renders Municipal Manager Dashboard and NOT Access Denied
-    expect(await screen.findByText(/welcome back,/i)).toBeInTheDocument();
-    const headings = await screen.findAllByRole('heading', { name: /municipal manager dashboard/i });
-    expect(headings.length).toBeGreaterThanOrEqual(1);
-    expect(screen.queryByText('Access Denied')).not.toBeInTheDocument();
-  });
-
-  it('ensures all 5 manager placeholder subroutes link back to /manager/dashboard', () => {
+  it('shows not found for removed manager placeholder subroutes', () => {
     useAuthStore.setState({
       isAuthenticated: true,
       isLoading: false,
@@ -453,9 +429,6 @@ describe('MunicipalManager Dashboard', () => {
     });
 
     const managerSubroutes = [
-      '/manager/ai-approvals',
-      '/manager/fleet',
-      '/manager/operations',
       '/manager/analytics',
       '/manager/audit',
     ];
@@ -467,9 +440,31 @@ describe('MunicipalManager Dashboard', () => {
         </MemoryRouter>
       );
 
-      const backLink = screen.getByRole('link', { name: /back to dashboard/i });
-      expect(backLink).toHaveAttribute('href', '/manager/dashboard');
+      expect(screen.getByRole('heading', { name: 'Page Not Found' })).toBeInTheDocument();
       unmount();
     });
+  });
+
+  it('wires Open Operational Incidents OverviewCard to /manager/reports', () => {
+    useAuthStore.setState({
+      isAuthenticated: true,
+      isLoading: false,
+      accessToken: 'token-manager',
+      user: {
+        id: 'manager-1',
+        fullName: 'Kavindi Silva',
+        email: 'manager@smartwaste.local',
+        role: 'MunicipalManager',
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/manager/dashboard']}>
+        <AppRoutes />
+      </MemoryRouter>
+    );
+
+    const incidentsCard = screen.getByRole('link', { name: /open operational incidents/i });
+    expect(incidentsCard).toHaveAttribute('href', '/manager/reports');
   });
 });

@@ -9,8 +9,6 @@ import {
   AiWorkflowIcon,
   FleetIcon,
   OperationsIcon,
-  AnalyticsIcon,
-  AuditIcon,
   UsersIcon,
 } from '../ui/Icons';
 
@@ -24,9 +22,12 @@ export const defaultOfficerNavItems: NavItem[] = [
   { label: 'Dashboard', to: '/officer/dashboard', icon: <DashboardIcon /> },
   { label: 'Waste Reports', to: '/officer/waste-reports', icon: <ReportsIcon /> },
   { label: 'Bin Management', to: '/officer/bins', icon: <BinsIcon /> },
-  { label: 'Collection Schedules', to: '/officer/schedules', icon: <SchedulesIcon /> },
+  { label: 'Collection Needs', to: '/officer/schedules', icon: <SchedulesIcon /> },
   { label: 'Collection Tasks', to: '/officer/tasks', icon: <TasksIcon /> },
+  { label: 'AI Approvals', to: '/officer/ai-approvals', icon: <AiWorkflowIcon /> },
+  { label: 'Dispatch & Routes', to: '/officer/dispatch', icon: <FleetIcon /> },
   { label: 'Complaints', to: '/officer/complaints', icon: <ComplaintsIcon /> },
+  { label: 'Operations', to: '/officer/operations', icon: <OperationsIcon /> },
 ];
 
 export const managerNavItems: NavItem[] = [
@@ -34,7 +35,7 @@ export const managerNavItems: NavItem[] = [
   { label: 'User Management', to: '/manager/users', icon: <UsersIcon /> },
   { label: 'AI Approvals', to: '/manager/ai-approvals', icon: <AiWorkflowIcon /> },
   { label: 'Fleet & Routes', to: '/manager/fleet', icon: <FleetIcon /> },
+  { label: 'Waste Reports', to: '/manager/reports', icon: <ReportsIcon /> },
+  { label: 'Complaints', to: '/manager/complaints', icon: <ComplaintsIcon /> },
   { label: 'Operations', to: '/manager/operations', icon: <OperationsIcon /> },
-  { label: 'Analytics', to: '/manager/analytics', icon: <AnalyticsIcon /> },
-  { label: 'Audit Logs', to: '/manager/audit', icon: <AuditIcon /> },
 ];

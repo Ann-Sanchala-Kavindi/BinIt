@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 using SmartWaste.Application.Common.Exceptions;
 
@@ -110,6 +111,42 @@ public class ExceptionHandlingMiddleware
                 Detail = userMgmtEx.Message,
                 Instance = context.Request.Path
             },
+            ForbiddenException forbEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.Forbidden,
+                Title = "Forbidden",
+                Detail = forbEx.Message,
+                Instance = context.Request.Path
+            },
+            InvalidWorkflowTransitionException transEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.Conflict,
+                Title = "Invalid Workflow State Transition",
+                Detail = transEx.Message,
+                Instance = context.Request.Path
+            },
+            BusinessRuleConflictException confEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.Conflict,
+                Title = "Business Rule Conflict",
+                Detail = confEx.Message,
+                Instance = context.Request.Path
+            },
+            FileValidationException fileValEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.BadRequest,
+                Title = "Invalid File",
+                Detail = fileValEx.Message,
+                Instance = context.Request.Path
+            },
+            StorageServiceException storEx => new ProblemDetails
+            {
+                Status = (int)HttpStatusCode.InternalServerError,
+                Title = "Storage Service Error",
+                Detail = storEx.Message,
+                Instance = context.Request.Path
+            },
+            FluentValidation.ValidationException valEx => CreateValidationProblemDetails(context, valEx),
             _ => new ProblemDetails
             {
                 Status = (int)HttpStatusCode.InternalServerError,
@@ -121,11 +158,67 @@ public class ExceptionHandlingMiddleware
 
         context.Response.StatusCode = problemDetails.Status ?? (int)HttpStatusCode.InternalServerError;
 
-        var json = JsonSerializer.Serialize(problemDetails, new JsonSerializerOptions
+        var json = JsonSerializer.Serialize(problemDetails, problemDetails.GetType(), new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase
         });
 
         await context.Response.WriteAsync(json);
+    }
+
+    private static ValidationProblemDetails CreateValidationProblemDetails(
+        HttpContext context,
+        FluentValidation.ValidationException valEx)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+
+        if (valEx.Errors != null && valEx.Errors.Any())
+        {
+            errors = valEx.Errors
+                .GroupBy(
+                    e => ToCamelCase(string.IsNullOrWhiteSpace(e.PropertyName) ? string.Empty : e.PropertyName),
+                    e => e.ErrorMessage)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.ToArray(),
+                    StringComparer.OrdinalIgnoreCase);
+        }
+        else if (!string.IsNullOrWhiteSpace(valEx.Message))
+        {
+            errors[string.Empty] = new[] { valEx.Message };
+        }
+
+        var detail = valEx.Errors != null && valEx.Errors.Any()
+            ? "One or more validation errors occurred."
+            : (!string.IsNullOrWhiteSpace(valEx.Message) ? valEx.Message : "One or more validation errors occurred.");
+
+        return new ValidationProblemDetails(errors)
+        {
+            Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+            Status = (int)HttpStatusCode.BadRequest,
+            Title = "Validation Failed",
+            Detail = detail,
+            Instance = context.Request.Path
+        };
+    }
+
+    private static string ToCamelCase(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return string.Empty;
+        }
+
+        var parts = name.Split('.');
+        for (var i = 0; i < parts.Length; i++)
+        {
+            var part = parts[i];
+            if (part.Length > 0)
+            {
+                parts[i] = char.ToLowerInvariant(part[0]) + part[1..];
+            }
+        }
+
+        return string.Join('.', parts);
     }
 }

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthLayout } from '../layouts/AuthLayout';
 import { AppLayout } from '../layouts/AppLayout';
 import { LoginPage } from '../features/auth/pages/LoginPage';
@@ -18,7 +19,22 @@ import { ManagerDashboardPage } from '../features/manager/pages/ManagerDashboard
 import { UserManagementPage } from '../features/manager/pages/UserManagementPage';
 import { ChangePasswordPage } from '../features/auth/pages/ChangePasswordPage';
 import { managerNavItems } from '../components/layout/navConfig';
-import { ComingSoonPage } from '../pages/ComingSoonPage';
+import { WasteReportsPage } from '../features/reporting/pages/WasteReportsPage';
+import { WasteReportDetailPage } from '../features/reporting/pages/WasteReportDetailPage';
+import { BinsPage } from '../features/collection/pages/BinsPage';
+import { BinDetailPage } from '../features/collection/pages/BinDetailPage';
+import { EditBinPage, RegisterBinPage } from '../features/collection/pages/BinFormPages';
+import { RecordBinObservationPage } from '../features/collection/pages/RecordBinObservationPage';
+import { CollectionNeedsPage } from '../features/collection/pages/CollectionNeedsPage';
+import { CollectionTaskEnhancedDetailPage, CollectionTasksPage } from '../features/collection/pages/CollectionTasksPages';
+import { ManagerFleetRoutesPage } from '../features/fleet/pages/ManagerFleetRoutesPage';
+import { DispatchRoutesPage } from '../features/fleet/pages/DispatchRoutesPage';
+import { AiApprovalsPage } from '../features/ai-approvals/pages/AiApprovalsPage';
+import { AiWorkflowDetailPage } from '../features/ai-approvals/pages/AiWorkflowDetailPage';
+import { ComplaintsPage } from '../features/complaints/pages/ComplaintsPage';
+import { ComplaintDetailPage } from '../features/complaints/pages/ComplaintDetailPage';
+import { OperationalIssuesPage } from '../features/operations/pages/OperationalIssuesPage';
+import { OperationalIssueDetailPage } from '../features/operations/pages/OperationalIssueDetailPage';
 
 /**
  * Renders auth pages or redirects already-authenticated users to their role default dashboard.
@@ -69,9 +85,19 @@ const RootRoute: React.FC = () => {
   return <HomePage />;
 };
 
+const defaultQueryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
 export const AppRoutes: React.FC = () => {
   return (
-    <Routes>
+    <QueryClientProvider client={defaultQueryClient}>
+      <Routes>
       {/* Public / Auth routes */}
       <Route element={<AuthLayout />}>
         <Route
@@ -90,56 +116,25 @@ export const AppRoutes: React.FC = () => {
         <Route element={<RoleRoute allowedRoles={['WasteOfficer']} />}>
           <Route element={<DashboardLayout />}>
             <Route path="/officer/dashboard" element={<OfficerDashboardPage />} />
-            <Route
-              path="/officer/waste-reports"
-              element={
-                <ComingSoonPage
-                  title="Waste Reports"
-                  description="Review, verify and manage citizen waste reports. This module is currently under development."
-                  backTo="/officer/dashboard"
-                />
-              }
-            />
-            <Route
-              path="/officer/bins"
-              element={
-                <ComingSoonPage
-                  title="Bin Management"
-                  description="Manage waste bins, locations, and operational status. This module is currently under development."
-                  backTo="/officer/dashboard"
-                />
-              }
-            />
-            <Route
-              path="/officer/schedules"
-              element={
-                <ComingSoonPage
-                  title="Collection Schedules"
-                  description="Create and manage scheduled waste collections. This module is currently under development."
-                  backTo="/officer/dashboard"
-                />
-              }
-            />
-            <Route
-              path="/officer/tasks"
-              element={
-                <ComingSoonPage
-                  title="Collection Tasks"
-                  description="Track and manage operational collection tasks. This module is currently under development."
-                  backTo="/officer/dashboard"
-                />
-              }
-            />
-            <Route
-              path="/officer/complaints"
-              element={
-                <ComingSoonPage
-                  title="Complaints"
-                  description="Review and manage citizen service complaints. This module is currently under development."
-                  backTo="/officer/dashboard"
-                />
-              }
-            />
+            <Route path="/officer/waste-reports" element={<WasteReportsPage />} />
+            <Route path="/officer/waste-reports/:id" element={<WasteReportDetailPage />} />
+            <Route path="/officer/reports" element={<Navigate to="/officer/waste-reports" replace />} />
+            <Route path="/officer/reports/:id" element={<WasteReportDetailPage />} />
+            <Route path="/officer/bins" element={<BinsPage />} />
+            <Route path="/officer/bins/register" element={<RegisterBinPage />} />
+            <Route path="/officer/bins/:id/observations/new" element={<RecordBinObservationPage />} />
+            <Route path="/officer/bins/:id" element={<BinDetailPage />} />
+            <Route path="/officer/bins/:id/edit" element={<EditBinPage />} />
+            <Route path="/officer/schedules" element={<CollectionNeedsPage />} />
+            <Route path="/officer/tasks" element={<CollectionTasksPage />} />
+            <Route path="/officer/tasks/:id" element={<CollectionTaskEnhancedDetailPage />} />
+            <Route path="/officer/ai-approvals" element={<AiApprovalsPage />} />
+            <Route path="/officer/ai-approvals/:workflowId" element={<AiWorkflowDetailPage />} />
+            <Route path="/officer/dispatch" element={<DispatchRoutesPage />} />
+            <Route path="/officer/complaints" element={<ComplaintsPage />} />
+            <Route path="/officer/complaints/:id" element={<ComplaintDetailPage />} />
+            <Route path="/officer/operations" element={<OperationalIssuesPage />} />
+            <Route path="/officer/operations/:id" element={<OperationalIssueDetailPage />} />
           </Route>
         </Route>
       </Route>
@@ -149,56 +144,22 @@ export const AppRoutes: React.FC = () => {
         <Route element={<RoleRoute allowedRoles={['MunicipalManager']} />}>
           <Route element={<DashboardLayout navItems={managerNavItems} title="Municipal Manager Dashboard" />}>
             <Route path="/manager/dashboard" element={<ManagerDashboardPage />} />
+            <Route path="/manager/reports" element={<WasteReportsPage />} />
+            <Route path="/manager/reports/:id" element={<WasteReportDetailPage />} />
+            <Route path="/manager/waste-reports" element={<Navigate to="/manager/reports" replace />} />
+            <Route path="/manager/waste-reports/:id" element={<WasteReportDetailPage />} />
+            <Route path="/manager/complaints" element={<ComplaintsPage />} />
+            <Route path="/manager/complaints/:id" element={<ComplaintDetailPage />} />
+            <Route path="/manager/operations" element={<OperationalIssuesPage />} />
+            <Route path="/manager/operations/:id" element={<OperationalIssueDetailPage />} />
             <Route path="/manager/users" element={<UserManagementPage />} />
-            <Route
-              path="/manager/ai-approvals"
-              element={
-                <ComingSoonPage
-                  title="AI Approvals"
-                  description="Review and adjudicate multi-agent AI workflow proposals and recommendations. This module is currently under development."
-                  backTo="/manager/dashboard"
-                />
-              }
-            />
+            <Route path="/manager/tasks" element={<CollectionTasksPage />} />
+            <Route path="/manager/tasks/:id" element={<CollectionTaskEnhancedDetailPage />} />
+            <Route path="/manager/ai-approvals" element={<AiApprovalsPage />} />
+            <Route path="/manager/ai-approvals/:workflowId" element={<AiWorkflowDetailPage />} />
             <Route
               path="/manager/fleet"
-              element={
-                <ComingSoonPage
-                  title="Fleet & Routes"
-                  description="Management visibility into collection vehicles, driver assignments, and active routes. This module is currently under development."
-                  backTo="/manager/dashboard"
-                />
-              }
-            />
-            <Route
-              path="/manager/operations"
-              element={
-                <ComingSoonPage
-                  title="Operations"
-                  description="Higher-level operational oversight, field incident tracking, and active collections. This module is currently under development."
-                  backTo="/manager/dashboard"
-                />
-              }
-            />
-            <Route
-              path="/manager/analytics"
-              element={
-                <ComingSoonPage
-                  title="Analytics"
-                  description="Aggregated municipal operational metrics, service performance, and reporting. This module is currently under development."
-                  backTo="/manager/dashboard"
-                />
-              }
-            />
-            <Route
-              path="/manager/audit"
-              element={
-                <ComingSoonPage
-                  title="Audit Logs"
-                  description="Auditable activity history for AI recommendations, approvals, and executive decisions. This module is currently under development."
-                  backTo="/manager/dashboard"
-                />
-              }
+              element={<ManagerFleetRoutesPage />}
             />
           </Route>
         </Route>
@@ -238,5 +199,6 @@ export const AppRoutes: React.FC = () => {
       <Route path="/unauthorized" element={<UnauthorizedPage />} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </QueryClientProvider>
   );
 };

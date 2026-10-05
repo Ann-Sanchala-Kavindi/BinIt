@@ -234,4 +234,27 @@ describe('LoginPage', () => {
     await user.click(closeIconBtn);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
+
+  it('toggles password visibility when the view password button is clicked', async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    );
+
+    const passwordInput = screen.getByLabelText(/^password$/i);
+    expect(passwordInput).toHaveAttribute('type', 'password');
+
+    const toggleBtn = screen.getByRole('button', { name: 'Show' });
+    await user.click(toggleBtn);
+
+    expect(passwordInput).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: 'Hide' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Hide' }));
+    expect(passwordInput).toHaveAttribute('type', 'password');
+    expect(screen.getByRole('button', { name: 'Show' })).toBeInTheDocument();
+  });
 });
+

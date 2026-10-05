@@ -2,11 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../shared/widgets/app_alert.dart';
 import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_card.dart';
 
-/// Reusable placeholder screen for upcoming Citizen feature destinations.
+/// Reusable screen for Citizen feature destinations.
 class CitizenPlaceholderScreen extends StatelessWidget {
   final String title;
   final String description;
@@ -73,12 +72,6 @@ class CitizenPlaceholderScreen extends StatelessWidget {
                         height: 1.5,
                       ),
                   textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: AppSpacing.xl),
-
-                // Operational Status Alert
-                const AppAlert.info(
-                  message: 'This feature is scheduled for implementation in upcoming municipal service modules.',
                 ),
                 const SizedBox(height: AppSpacing.xl),
 

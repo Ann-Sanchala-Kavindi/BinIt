@@ -2,7 +2,7 @@ name: Backend CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
 
@@ -58,6 +58,9 @@ jobs:
 
       - name: Apply database migrations
         run: dotnet ef database update --project backend/src/SmartWaste.Infrastructure --startup-project backend/src/SmartWaste.Api --configuration Release --no-build
+
+      - name: Verify migration model is current
+        run: dotnet ef migrations has-pending-model-changes --project backend/src/SmartWaste.Infrastructure --startup-project backend/src/SmartWaste.Api --configuration Release --no-build
 
       - name: Run tests
         run: dotnet test backend/SmartWaste.sln --configuration Release --no-build

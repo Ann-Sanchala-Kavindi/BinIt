@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { DashboardSidebar, type NavItem } from '../components/layout/DashboardSidebar';
 import { DashboardHeader } from '../components/layout/DashboardHeader';
 
@@ -13,9 +13,11 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({
   title,
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { pathname } = useLocation();
+  const isDashboardHome = pathname === '/officer/dashboard' || pathname === '/manager/dashboard';
 
   return (
-    <div className="min-h-screen flex bg-[#F0F6F9] text-slate-900">
+    <div className={`min-h-screen flex text-slate-900 ${isDashboardHome ? 'bg-[#F8FBFC]' : 'bg-[#F0F6F9]'}`}>
       {/* Desktop Fixed Sidebar */}
       <div className="hidden md:flex md:shrink-0 sticky top-0 h-screen">
         <DashboardSidebar items={navItems} />

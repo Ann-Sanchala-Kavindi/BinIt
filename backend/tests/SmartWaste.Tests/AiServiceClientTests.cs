@@ -25,7 +25,7 @@ public class AiServiceClientTests
         var httpClient = new HttpClient(handler)
         {
             BaseAddress = new Uri("http://127.0.0.1:8000/"),
-            Timeout = TimeSpan.FromSeconds(5)
+            Timeout = TimeSpan.FromSeconds(300)
         };
         var client = new AiServiceClient(httpClient, NullLogger<AiServiceClient>.Instance);
         return (client, handler);

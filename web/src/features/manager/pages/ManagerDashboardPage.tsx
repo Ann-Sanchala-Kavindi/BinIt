@@ -1,14 +1,14 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../../store/authStore';
+import { managerDashboardApi } from '../api/dashboardApi';
 import { OverviewCard } from '../../officer/components/OverviewCard';
 import { QuickActions, type ActionItem } from '../../officer/components/QuickActions';
-import { NeedsAttentionSection } from '../../officer/components/NeedsAttentionSection';
+import { DashboardNeedsAttentionQueue } from '../../officer/components/OfficerNeedsAttentionQueue';
 import {
   AiWorkflowIcon,
   FleetIcon,
   OperationsIcon,
-  AnalyticsIcon,
-  AuditIcon,
   TasksIcon,
   ComplaintsIcon,
   LeafIcon,
@@ -19,7 +19,7 @@ const managerActions: ActionItem[] = [
     label: 'Review AI Approvals',
     to: '/manager/ai-approvals',
     icon: <AiWorkflowIcon className="w-4 h-4" />,
-    variant: 'amber',
+    variant: 'mint',
   },
   {
     label: 'View Fleet & Routes',
@@ -33,22 +33,23 @@ const managerActions: ActionItem[] = [
     icon: <OperationsIcon className="w-4 h-4" />,
     variant: 'blue',
   },
-  {
-    label: 'View Analytics',
-    to: '/manager/analytics',
-    icon: <AnalyticsIcon className="w-4 h-4" />,
-    variant: 'mint',
-  },
-  {
-    label: 'Review Audit Logs',
-    to: '/manager/audit',
-    icon: <AuditIcon className="w-4 h-4" />,
-    variant: 'rose',
-  },
 ];
 
 export const ManagerDashboardPage: React.FC = () => {
   const { user } = useAuthStore();
+  const overviewQuery = useQuery({
+    queryKey: ['municipal-manager-dashboard', 'overview'],
+    queryFn: managerDashboardApi.getOverview,
+    staleTime: 30_000,
+    refetchOnMount: 'always',
+  });
+  const overview = overviewQuery.isError ? undefined : overviewQuery.data;
+  const needsAttentionQuery = useQuery({
+    queryKey: ['municipal-manager-dashboard', 'needs-attention'],
+    queryFn: managerDashboardApi.getNeedsAttention,
+    staleTime: 30_000,
+    refetchOnMount: 'always',
+  });
 
   const currentFormattedDate = new Intl.DateTimeFormat('en-GB', {
     weekday: 'long',
@@ -95,7 +96,7 @@ export const ManagerDashboardPage: React.FC = () => {
       </div>
 
       {/* Management Overview KPI Cards */}
-      <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-5">
+      <div>
         <div className="mb-4">
           <h2 className="text-xs font-bold text-slate-900 tracking-wider uppercase">
             Management Overview
@@ -105,38 +106,48 @@ export const ManagerDashboardPage: React.FC = () => {
           </p>
         </div>
 
+        {overviewQuery.isError && (
+          <div role="alert" className="mb-4 flex items-center gap-3 text-sm text-rose-700">
+            <span>Unable to load management overview.</span>
+            <button type="button" className="font-semibold underline" onClick={() => void overviewQuery.refetch()}>
+              Retry
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
           <OverviewCard
             label="AI Workflows Awaiting Approval"
-            value="—"
+            value={overview?.aiWorkflowsAwaitingApproval ?? '—'}
             description="Pending executive review"
             icon={<AiWorkflowIcon />}
-            variant="amber"
+            variant="mint"
           />
           <OverviewCard
             label="Active Collection Assignments"
-            value="—"
-            description="In-progress fleet routes"
+            value={overview?.activeCollectionAssignments ?? '—'}
+            description="Assigned & in-progress routes"
             icon={<TasksIcon />}
             variant="emerald"
           />
           <OverviewCard
             label="Available Vehicles"
-            value="—"
+            value={overview?.availableVehicles ?? '—'}
             description="Ready for assignment"
             icon={<FleetIcon />}
             variant="blue"
           />
           <OverviewCard
             label="Open Operational Incidents"
-            value="—"
+            value={overview?.openOperationalIncidents ?? '—'}
             description="Field exceptions reported"
             icon={<OperationsIcon />}
             variant="mint"
+            to="/manager/reports"
           />
           <OverviewCard
             label="Unresolved Complaints"
-            value="—"
+            value={overview?.unresolvedComplaints ?? '—'}
             description="Citizen escalations"
             icon={<ComplaintsIcon />}
             variant="rose"
@@ -151,13 +162,13 @@ export const ManagerDashboardPage: React.FC = () => {
         actions={managerActions}
       />
 
-      {/* Decision Queue Section */}
-      <NeedsAttentionSection
-        title="Needs Attention"
-        badgeText="Decision Queue"
-        subtitle="Executive approvals, critical incidents, and operational escalations"
-        emptyTitle="All Decision Queues Clear"
-        emptyDescription="Management decisions and operational issues requiring attention will appear here once the corresponding services are connected."
+      {/* Initial review queue */}
+      <DashboardNeedsAttentionQueue
+        role="manager"
+        items={needsAttentionQuery.data}
+        isLoading={needsAttentionQuery.isLoading}
+        isError={needsAttentionQuery.isError}
+        onRetry={() => void needsAttentionQuery.refetch()}
       />
     </div>
   );
