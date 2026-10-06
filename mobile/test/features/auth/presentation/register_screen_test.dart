@@ -12,6 +12,30 @@ void main() {
     );
   }
 
+  testWidgets('uses Bin It branding while keeping the registration form', (tester) async {
+    await tester.pumpWidget(createTestWidget());
+
+    expect(find.text('Join Bin It'), findsOneWidget);
+    expect(find.text('Join Smart Waste'), findsNothing);
+    expect(find.byKey(const Key('register_email_field')), findsWidgets);
+    expect(find.byKey(const Key('register_password_field')), findsWidgets);
+    expect(find.byKey(const Key('register_confirm_password_field')), findsWidgets);
+  });
+
+  for (final width in const [320.0, 360.0, 390.0, 412.0]) {
+    testWidgets('registration header and form fit ${width.toInt()}px width', (tester) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(createTestWidget());
+
+      expect(find.text('Join Bin It'), findsOneWidget);
+      expect(find.byKey(const Key('register_email_field')), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   group('RegisterScreen Validation Tests', () {
     testWidgets('verifies that no role selector or dropdown exists on the form', (tester) async {
       await tester.pumpWidget(createTestWidget());

@@ -82,7 +82,11 @@ class AuthNotifier extends Notifier<AuthState> {
       state = AuthState.authenticated(user);
     } catch (_) {
       // Clear token if invalid or expired
-      await _repository.logout();
+      try {
+        await _repository.logout();
+      } catch (_) {
+        // Secure storage may be unavailable; still exit the loading state.
+      }
       state = const AuthState.unauthenticated();
     }
   }

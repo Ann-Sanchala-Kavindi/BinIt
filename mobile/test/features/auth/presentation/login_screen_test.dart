@@ -13,6 +13,42 @@ void main() {
     );
   }
 
+  testWidgets('shows Bin It branding in the existing login header', (tester) async {
+    await tester.pumpWidget(createTestWidget());
+    await tester.pumpAndSettle();
+
+    final logo = find.byWidgetPredicate(
+      (widget) => widget is Image &&
+          widget.image == const AssetImage('assets/appicon.png'),
+    );
+    expect(logo, findsOneWidget);
+    expect(tester.getSize(logo), const Size(38, 38));
+    expect(tester.widget<Image>(logo).fit, BoxFit.contain);
+    expect(tester.widget<Image>(logo).semanticLabel, 'Bin It logo');
+    expect(find.byIcon(Icons.recycling_rounded), findsNothing);
+    expect(find.text('Bin It'), findsOneWidget);
+    expect(find.text('Smart Waste'), findsNothing);
+    expect(find.byKey(const Key('login_email_field')), findsWidgets);
+    expect(find.byKey(const Key('login_password_field')), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final width in const [320.0, 360.0, 390.0, 412.0]) {
+    testWidgets('login branding and form fit ${width.toInt()}px width', (tester) async {
+      tester.view.physicalSize = Size(width, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(createTestWidget());
+      await tester.pumpAndSettle();
+
+      expect(find.text('Bin It'), findsOneWidget);
+      expect(find.byKey(const Key('login_email_field')), findsWidgets);
+      expect(find.byKey(const Key('login_password_field')), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   group('LoginScreen Validation Tests', () {
     testWidgets('rejects submission with empty email and empty password', (tester) async {
       await tester.pumpWidget(createTestWidget());

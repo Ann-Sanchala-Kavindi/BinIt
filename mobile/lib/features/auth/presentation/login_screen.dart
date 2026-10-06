@@ -71,16 +71,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           shape: BoxShape.circle,
                           border: Border.all(color: AppColors.primaryBorder, width: 1.5),
                         ),
-                        child: const Icon(
-                          Icons.recycling_rounded,
-                          size: 38,
-                          color: AppColors.primary,
+                        child: Center(
+                          child: Image.asset(
+                            'assets/appicon.png',
+                            width: 38,
+                            height: 38,
+                            fit: BoxFit.contain,
+                            semanticLabel: 'Bin It logo',
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text(
-                      'Smart Waste',
+                      'Bin It',
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                             fontWeight: FontWeight.bold,
                             color: AppColors.primaryDark,

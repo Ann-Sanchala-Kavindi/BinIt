@@ -8,6 +8,7 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/auth/providers/auth_provider.dart';
+import '../../features/auth/providers/startup_splash_provider.dart';
 import '../../features/citizen/presentation/citizen_dashboard_screen.dart';
 import '../../features/citizen/presentation/citizen_placeholder_screen.dart';
 import '../../features/citizen/presentation/citizen_profile_screen.dart';
@@ -45,6 +46,9 @@ class AuthRouterListenable extends ChangeNotifier {
 
   AuthRouterListenable(this._ref) {
     _ref.listen<AuthState>(authProvider, (previous, next) {
+      notifyListeners();
+    });
+    _ref.listen<bool>(startupSplashMinimumElapsedProvider, (previous, next) {
       notifyListeners();
     });
   }
@@ -321,14 +325,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final authState = ref.read(authProvider);
       final isAuth = authState.isAuthenticated;
       final isChecking = authState.isInitial || authState.isLoading;
+      final minimumSplashElapsed = ref.read(
+        startupSplashMinimumElapsedProvider,
+      );
 
       final location = state.matchedLocation;
       final isAuthRoute = location == '/login' || location == '/register';
       final isSplash = location == '/splash';
       final isChangePassword = location == '/change-password';
 
-      // 1. If still checking stored token, stay on or go to splash
-      if (isChecking) {
+      // 1. Cold startup needs both session resolution and minimum branding time.
+      if (isChecking || !minimumSplashElapsed) {
         return isSplash ? null : '/splash';
       }
 
