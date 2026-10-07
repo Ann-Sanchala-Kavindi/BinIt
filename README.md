@@ -7,12 +7,12 @@ The platform supports waste reporting, report verification, collection planning,
 
 ## Deployment Links
 
-- **Web Application:** `https://binit-web.onrender.com`
-- **Backend API:** `https://binit-4pse.onrender.com`
-- **Backend Health Check:** `https://binit-4pse.onrender.com/health`
-- **AI Service:** `https://binit-ai.onrender.com`
-- **Android APK:** `https://drive.google.com/drive/folders/106yqQzY5UXgQt0M_vITuKF5FWFRj74gP`
-- **Demonstration Video:** `https://drive.google.com/drive/folders/106yqQzY5UXgQt0M_vITuKF5FWFRj74gP`
+- **Web Application:** https://binit-web.onrender.com
+- **Backend API:** https://binit-4pse.onrender.com
+- **Backend Health Check:** https://binit-4pse.onrender.com/health
+- **AI Service:** https://binit-ai.onrender.com
+- **Android APK:** https://drive.google.com/drive/folders/106yqQzY5UXgQt0M_vITuKF5FWFRj74gP
+- **Demonstration Video:** https://drive.google.com/drive/folders/106yqQzY5UXgQt0M_vITuKF5FWFRj74gP
 
 
 ## Project Scope
@@ -35,7 +35,7 @@ The system includes:
 - `Appuhamy P.P.D.A.S.K.` — `IT24100566` — `Component 3: Fleet, Driver & Route Management`
 - `Perera H.M.N.S.` — `IT24100067` — `Component 4: Operations, Complaints & Analytics`
 
-  ## Technology Stack
+## Technology Stack
 
 - **Backend:** ASP.NET Core 8, C#, Entity Framework Core
 - **Database:** PostgreSQL / Supabase
@@ -47,17 +47,16 @@ The system includes:
 - **Authentication:** ASP.NET Identity + JWT
 
 
-# User Roles
-
-## Citizen
-## Driver
-## Waste Officer 
-## Municipal Manager
+## User Roles
+Citizen
+Driver
+Waste Officer 
+Municipal Manager
 
 
 ## Major Workflow
 
-
+```text
 Citizen submits waste report
         ↓
 Backend stores report
@@ -134,19 +133,19 @@ The AI workflow uses:
 
 ## Test Accounts
 
-### Citizen
+  Citizen
 - Email: `citizen@smartwaste.local`
 - Password: `DevPassword123!`
 
-### Driver
+  Driver
 - Email: `driver@smartwaste.local`
 - Password: `DevPassword123!`
 
-### Waste Officer  
+  Waste Officer  
 - Email: `officer@smartwaste.local`
 - Password: `DevPassword123!`
 
-### Municipal Manager
+  Municipal Manager
 - Email: `manager@smartwaste.local`
 - Password: `DevPassword123!`
 
@@ -162,8 +161,8 @@ Before testing:
 
 1. Open the backend health endpoint and AI service health endpoint
 
-   `https://binit-4pse.onrender.com/health`
-   `https://binit-ai.onrender.com/health`
+   https://binit-4pse.onrender.com/health
+   https://binit-ai.onrender.com/health
    
 
 3. Wait until it responds successfully.
@@ -185,4 +184,4 @@ Cold starts may make the first request noticeably slower. Later requests should 
 - Flutter application completed
 - Android APK built
 - Automated tests implemented
-```
+
