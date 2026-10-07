@@ -1,9 +1,7 @@
 
 # Bin It — Smart Waste Management System
 
-Bin It is a smart waste management platform that connects citizens, municipal staff, drivers, and AI-assisted planning in one system.
-
-The platform supports waste reporting, report verification, collection planning, fleet and route planning, dispatch approval, driver assignments, and operational issue handling.
+Bin It is a smart waste management platform that connects citizens, municipal staff, drivers, and AI-assisted planning in one system.The platform supports waste reporting, report verification, collection planning, fleet and route planning, dispatch approval, driver assignments, and operational issue handling.
 
 ## Deployment Links
 
@@ -48,10 +46,10 @@ The system includes:
 
 
 ## User Roles
-Citizen
-Driver
-Waste Officer 
-Municipal Manager
+-Citizen
+-Driver
+-Waste Officer 
+-Municipal Manager
 
 
 ## Major Workflow
@@ -133,19 +131,19 @@ The AI workflow uses:
 
 ## Test Accounts
 
-  Citizen
+### Citizen
 - Email: `citizen@smartwaste.local`
 - Password: `DevPassword123!`
 
-  Driver
+### Driver
 - Email: `driver@smartwaste.local`
 - Password: `DevPassword123!`
 
-  Waste Officer  
+### Waste Officer  
 - Email: `officer@smartwaste.local`
 - Password: `DevPassword123!`
 
-  Municipal Manager
+### Municipal Manager
 - Email: `manager@smartwaste.local`
 - Password: `DevPassword123!`
 
@@ -161,8 +159,8 @@ Before testing:
 
 1. Open the backend health endpoint and AI service health endpoint
 
-   https://binit-4pse.onrender.com/health
-   https://binit-ai.onrender.com/health
+   - https://binit-4pse.onrender.com/health
+   - https://binit-ai.onrender.com/health
    
 
 3. Wait until it responds successfully.
